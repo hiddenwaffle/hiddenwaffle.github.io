@@ -18,6 +18,8 @@ Vue.component('grid-tile', {
       if (raw instanceof Array) {
         if (raw.length === 0) {
           return ''
+        } else if (raw.includes('hidden')) {
+          return '.'
         } else if (raw.includes('mine')) { // TODO: Should show this only on game over.
           return 'X'
         }
