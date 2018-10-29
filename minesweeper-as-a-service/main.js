@@ -1,15 +1,14 @@
+const EventBus = new Vue();
 const serviceLocation = location.hostname === 'localhost' ? 'http://localhost:3000' : 'https://minesweeper-as-a-service.herokuapp.com'
 
-// const containsPair = (x, y, pairs) => (pairs.some(pair => (pair[0] === x && pair[1] === y)))
-
-// https://stackoverflow.com/a/29559488
-const generateNumbers = (count) => ([...Array(count).keys()])
-
 const gridTileTemplate = `
-  <div class="grid-tile">{{ marker }}</div>
+  <div @click="tileClicked"
+       class="grid-tile">
+    {{ marker }}
+  </div>
 `
-
 Vue.component('grid-tile', {
+  template: gridTileTemplate,
   props: ['grid-index', 'tiles'],
   computed: {
     marker() {
@@ -28,8 +27,15 @@ Vue.component('grid-tile', {
       }
     }
   },
-  template: gridTileTemplate
+  methods: {
+    tileClicked() {
+      EventBus.$emit('tile-clicked', this.gridIndex);
+    }
+  }
 })
+
+// https://stackoverflow.com/a/29559488
+const generateNumbers = (count) => ([...Array(count).keys()])
 
 const minesweeperAppTemplate = `
   <div id="minesweeper-app">
@@ -47,10 +53,10 @@ const minesweeperAppTemplate = `
         </tbody>
       </table>
     </div>
-  <div>
+  </div>
 `
-
 Vue.component('minesweeper-app', {
+  template: minesweeperAppTemplate,
   props: ['state'],
   computed: {
     width() {
@@ -73,8 +79,7 @@ Vue.component('minesweeper-app', {
     gridToIndex(x, y) {
       return y * this.width + x
     }
-  },
-  template: minesweeperAppTemplate
+  }
 })
 
 const container = new Vue({
@@ -82,14 +87,37 @@ const container = new Vue({
   data: {
     state: null
   },
+  created() {
+    EventBus.$on('tile-clicked', this.tileClicked)
+  },
   mounted() {
     fetch(`${serviceLocation}/reset`).then((response) => {
       return response.json()
     }).then((state) => {
-      console.log('state', JSON.stringify(state))
+      // console.log('state', JSON.stringify(state)) // TODO: Remove
       document.getElementById('container').style.display = 'flex'
       this.state = state
     })
   },
+  methods: {
+    tileClicked(gridIndex) {
+      const payload = {
+        ...this.state,
+        'pick-grid-index': gridIndex
+      }
+      fetch(`${serviceLocation}/pick`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      }).then((response) => {
+        return response.json()
+      }).then((state) => {
+        // console.log('state', JSON.stringify(state)) // TODO: Remove
+        this.state = state
+      })
+    }
+  }
 })
 
