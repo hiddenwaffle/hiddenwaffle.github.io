@@ -2,7 +2,8 @@ const EventBus = new Vue();
 const serviceLocation = location.hostname === 'localhost' ? 'http://localhost:3000' : 'https://minesweeper-as-a-service.herokuapp.com'
 
 const gridTileTemplate = `
-  <div @click="tileClicked"
+  <div @click="emitTileClicked('clear')"
+       @contextmenu.prevent.stop="emitTileClicked('flag')"
        class="grid-tile">
     {{ marker }}
   </div>
@@ -19,6 +20,8 @@ Vue.component('grid-tile', {
           return ''
         } else if (raw.includes('hidden')) {
           return '.'
+        } else if (raw.includes('flag')) {
+          return 'flag'
         } else if (raw.includes('mine')) { // TODO: Should show this only on game over.
           return 'X'
         }
@@ -28,8 +31,8 @@ Vue.component('grid-tile', {
     }
   },
   methods: {
-    tileClicked() {
-      EventBus.$emit('tile-clicked', this.gridIndex);
+    emitTileClicked(action) {
+      EventBus.$emit('tile-clicked', { index: this.gridIndex, action });
     }
   }
 })
@@ -38,7 +41,8 @@ Vue.component('grid-tile', {
 const generateNumbers = (count) => ([...Array(count).keys()])
 
 const minesweeperAppTemplate = `
-  <div id="minesweeper-app">
+  <div id="minesweeper-app"
+       @contextmenu.prevent.stop>
     <h1 id="title">Minesweeper as a Service</h1>
     <div>
       <table id="playing-field">
@@ -88,7 +92,7 @@ const container = new Vue({
     state: null
   },
   created() {
-    EventBus.$on('tile-clicked', this.tileClicked)
+    EventBus.$on('tile-clicked', this.postToServer)
   },
   mounted() {
     fetch(`${serviceLocation}/reset`).then((response) => {
@@ -100,12 +104,12 @@ const container = new Vue({
     })
   },
   methods: {
-    tileClicked(gridIndex) {
+    postToServer({ index, action }) {
       const payload = {
         ...this.state,
-        'pick-grid-index': gridIndex
+        'pick-grid-index': index
       }
-      fetch(`${serviceLocation}/pick`, {
+      fetch(`${serviceLocation}/${action}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -117,7 +121,7 @@ const container = new Vue({
         // console.log('state', JSON.stringify(state)) // TODO: Remove
         this.state = state
       })
-    }
+    },
   }
 })
 
