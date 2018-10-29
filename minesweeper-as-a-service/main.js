@@ -1,6 +1,6 @@
 const serviceLocation = location.hostname === 'localhost' ? 'http://localhost:3000' : 'https://minesweeper-as-a-service.herokuapp.com'
 
-const containsPair = (x, y, pairs) => (pairs.some(pair => (pair[0] === x && pair[1] === y)))
+// const containsPair = (x, y, pairs) => (pairs.some(pair => (pair[0] === x && pair[1] === y)))
 
 // https://stackoverflow.com/a/29559488
 const generateNumbers = (count) => ([...Array(count).keys()])
@@ -10,13 +10,20 @@ const gridTileTemplate = `
 `
 
 Vue.component('grid-tile', {
-  props: ['x', 'y', 'mines'],
+  props: ['grid-index', 'tiles'],
   computed: {
     marker() {
-      if (containsPair(this.x, this.y, this.mines)) {
-        return 'X'
-      } else {
+      const raw = this.tiles[this.gridIndex]
+      switch (raw) {
+      case '':
         return ''
+      case 'mine':
+        return 'X'
+      case null:
+      case undefined:
+        return '?'
+      default:
+        return raw
       }
     }
   },
@@ -29,11 +36,10 @@ const minesweeperAppTemplate = `
     <div>
       <table id="playing-field">
         <tbody>
-          <tr v-for="y in boardHeight">
-            <td v-for="x in boardWidth">
-              <grid-tile v-bind:x="x"
-             v-bind:y="y"
-             v-bind:mines="mines">
+          <tr v-for="y in rows">
+            <td v-for="x in columns">
+              <grid-tile v-bind:grid-index="gridToIndex(x, y)"
+                         v-bind:tiles="tiles">
               </grid-tile>
             </td>
           </tr>
@@ -46,14 +52,25 @@ const minesweeperAppTemplate = `
 Vue.component('minesweeper-app', {
   props: ['state'],
   computed: {
-    boardWidth() {
-      return this.state ? generateNumbers(this.state['board-width']) : 0
+    width() {
+      return this.state ? this.state['width'] : 0
     },
-    boardHeight() {
-      return this.state ? generateNumbers(this.state['board-height']): 0
+    height() {
+      return this.state ? this.state['height'] : 0
     },
-    mines() {
-      return this.state ? this.state['mines'] : []
+    columns() {
+      return generateNumbers(this.width)
+    },
+    rows() {
+      return generateNumbers(this.height)
+    },
+    tiles() {
+      return this.state ? this.state['tiles'] : []
+    }
+  },
+  methods: {
+    gridToIndex(x, y) {
+      return y * this.width + x
     }
   },
   template: minesweeperAppTemplate
@@ -68,9 +85,8 @@ const container = new Vue({
     fetch(`${serviceLocation}/reset`).then((response) => {
       return response.json()
     }).then((state) => {
-      // TODO: Is there a better way to prevent render before template is filled in?
-      document.getElementById('container').style.display = 'flex'
       console.log('state', JSON.stringify(state))
+      document.getElementById('container').style.display = 'flex'
       this.state = state
     })
   },
