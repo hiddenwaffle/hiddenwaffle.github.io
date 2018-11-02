@@ -42,7 +42,7 @@ Vue.component('grid-tile', {
           if (number > 0) {
             return number
           } else {
-            return '-' // Should not get here
+            return '' // Should not get here
           }
         }
       } else {
