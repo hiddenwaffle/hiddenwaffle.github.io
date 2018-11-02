@@ -1,6 +1,19 @@
 const EventBus = new Vue();
 const serviceLocation = location.hostname === 'localhost' ? 'http://localhost:3000' : 'https://minesweeper-as-a-service.herokuapp.com'
 
+const extractNumber = (raw) => {
+  if (raw.includes(0)) return 0
+  if (raw.includes(1)) return 1
+  if (raw.includes(2)) return 2
+  if (raw.includes(3)) return 3
+  if (raw.includes(4)) return 4
+  if (raw.includes(5)) return 5
+  if (raw.includes(6)) return 6
+  if (raw.includes(7)) return 7
+  if (raw.includes(8)) return 8
+  return 'number-unknown'
+}
+
 const gridTileTemplate = `
   <div @click="emitTileClicked('clear')"
        @contextmenu.prevent.stop="emitTileClicked('flag')"
@@ -18,12 +31,19 @@ Vue.component('grid-tile', {
       if (raw instanceof Array) {
         if (raw.length === 0) {
           return ''
-        } else if (raw.includes('hidden')) {
-          return '.'
+//        } else if (raw.includes('hidden')) {
+//          return '.'
         } else if (raw.includes('flag')) {
           return 'flag'
         } else if (raw.includes('mine')) { // TODO: Should show this only on game over.
           return 'X'
+        } else {
+          const number = extractNumber(raw)
+          if (number > 0) {
+            return number
+          } else {
+            return '-' // Should not get here
+          }
         }
       } else {
         return raw
