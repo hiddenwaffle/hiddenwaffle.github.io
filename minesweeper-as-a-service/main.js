@@ -17,7 +17,7 @@ const extractNumber = (raw) => {
 const gridTileTemplate = `
   <div @click="emitTileClicked('clear')"
        @contextmenu.prevent.stop="emitTileClicked('flag')"
-       class="grid-tile">
+       :class="'grid-tile ' + hiddenBorderClass">
     {{ marker }}
   </div>
 `
@@ -25,6 +25,19 @@ Vue.component('grid-tile', {
   template: gridTileTemplate,
   props: ['grid-index', 'tiles'],
   computed: {
+    hiddenBorderClass() {
+      const raw = this.tiles[this.gridIndex]
+      if (!raw) return ''
+      if (raw instanceof Array) {
+        if (raw.length === 0) {
+          return ''
+        } else if (raw.includes('hidden')) {
+          return 'grid-tile-hidden'
+        }
+      } else {
+        return raw
+      }
+    },
     marker() {
       const raw = this.tiles[this.gridIndex]
       if (!raw) return '?'
