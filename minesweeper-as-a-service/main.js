@@ -43,11 +43,11 @@ Vue.component('grid-tile', {
       if (!raw) return '?'
       if (raw instanceof Array) {
         if (raw.length === 0) {
-          return ''
+          return '?'
         } else if (raw.includes('flag')) {
           return 'flag'
         } else if (raw.includes('hidden')) {
-          return '.'
+          return ''
         } else if (raw.includes('mine')) { // TODO: Should show this only on game over.
           return 'X'
         } else {
@@ -55,7 +55,7 @@ Vue.component('grid-tile', {
           if (number > 0) {
             return number
           } else {
-            return '' // Should not get here
+            return ''
           }
         }
       } else {
