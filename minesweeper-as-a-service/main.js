@@ -77,6 +77,11 @@ const minesweeperAppTemplate = `
   <div id="minesweeper-app"
        @contextmenu.prevent.stop>
     <h1 id="title">Minesweeper as a Service</h1>
+    <p id="subtitle"
+       :class="winOrLose"
+       :style="{ visibility: gameOverVisibility }">
+       Game Over - Reload to Play Again
+    </p>
     <div>
       <table id="playing-field">
         <tbody>
@@ -110,6 +115,12 @@ Vue.component('minesweeper-app', {
     },
     tiles() {
       return this.state ? this.state['tiles'] : []
+    },
+    winOrLose() {
+      return this.state && this.state['win'] ? 'win' : 'lose'
+    },
+    gameOverVisibility() {
+      return this.state && this.state['game-over'] ? 'visible' : 'hidden'
     }
   },
   methods: {
