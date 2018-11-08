@@ -31,6 +31,18 @@ body, html {
   margin-top: 8px;
 }
 
+#play-again-link {
+  cursor: pointer;
+}
+
+#play-again-link:hover {
+  text-decoration: underline;
+}
+
+#click-here {
+  text-decoration: underline;
+}
+
 .lose {
   color: red;
 }

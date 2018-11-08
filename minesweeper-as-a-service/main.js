@@ -80,7 +80,10 @@ const minesweeperAppTemplate = `
     <p id="subtitle"
        :class="winOrLose"
        :style="{ visibility: gameOverVisibility }">
-       Game Over - Reload to Play Again
+       <a @click.stop.prevent="playAgainClicked"
+          id="play-again-link">
+         Game Over!  <span id="click-here">Click Here</span> To Play Again
+       </a>
     </p>
     <div>
       <table id="playing-field">
@@ -126,6 +129,9 @@ Vue.component('minesweeper-app', {
   methods: {
     gridToIndex(x, y) {
       return y * this.width + x
+    },
+    playAgainClicked() {
+      EventBus.$emit('reset-clicked')
     }
   }
 })
@@ -136,19 +142,27 @@ const container = new Vue({
     state: null
   },
   created() {
-    EventBus.$on('tile-clicked', this.postToServer)
+    EventBus.$on('reset-clicked', this.resetClicked)
+    EventBus.$on('tile-clicked', this.tileClicked)
   },
   mounted() {
-    fetch(`${serviceLocation}/reset`).then((response) => {
-      return response.json()
-    }).then((state) => {
-      // console.log('state', JSON.stringify(state)) // TODO: Remove
+    this.resetRequested(() => {
       document.getElementById('container').style.display = 'flex'
-      this.state = state
     })
   },
   methods: {
-    postToServer({ index, action }) {
+    resetClicked() {
+      this.resetRequested(() => { })
+    },
+    resetRequested(cb) {
+      fetch(`${serviceLocation}/reset`).then((response) => {
+        return response.json()
+      }).then((state) => {
+        this.state = state
+        cb()
+      })
+    },
+    tileClicked({ index, action }) {
       const payload = {
         ...this.state,
         'pick-grid-index': index
@@ -162,7 +176,6 @@ const container = new Vue({
       }).then((response) => {
         return response.json()
       }).then((state) => {
-        // console.log('state', JSON.stringify(state)) // TODO: Remove
         this.state = state
       })
     },
