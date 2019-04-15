@@ -6,7 +6,6 @@
     <link href="https://fonts.googleapis.com/css?family=Fira+Sans" rel="stylesheet"> 
     <style>
         body {
-            text-align: center;
             font-family: 'Fira Sans', sans-serif;
             color: #eee;
             background-color: #333;
@@ -25,20 +24,45 @@
             border-radius: 8px;
             box-shadow: -4px 4px 6px 4px #222;
         }
+        .container {
+          margin-top: 32px;
+          text-align: center;
+        }
+        .section {
+          margin-top: 48px;
+        }
+        .notes {
+          margin-top: 8px;
+        }
+        .corner {
+          margin-left: 32px;
+        }
     </style>
     <!-- Test 1 -->
 </head>
 <body>
 
-<div style="margin-top: 32px">
+<div class="container">
     <h1>unremarkable</h1>
-    <a href="./mazing">Mazing</a>
-    |
-    <a href="./lighting">Lighting</a>
-    |
-    <a href="https://github.com/hiddenwaffle">GitHub</a>
+    <div class="section">
+      <a href="./flying">Flying</a>
+      <div class="notes">CSE 7319 Software Architecture Project</div>
+    </div>
+    <div class="section">
+      <a href="./lighting">Lighting</a>
+      <div class="notes">Tetris Clone vs AI</div>
+    </div>
+    <div class="section">
+      <a href="./mazing">Mazing</a>
+      <div class="notes">Pac-Man Clone</div>
+    </div>
+    <div class="section">
+      <a href="https://github.com/hiddenwaffle">GitHub</a>
+      <div class="notes">Other Stuff</div>
+    </div>
 </div>
-<img src="campfire-01.jpg" alt="campfire"/>
+
+<!-- <img src="campfire-01.jpg" alt="campfire"/> -->
 
 </body>
 </html>
