@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shopping List</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --warm-cream: #FDF6E9;
+            --deep-terra: #B85C38;
+            --forest: #2D5A3D;
+            --charcoal: #2C2C2C;
+            --soft-sage: #E8EEEA;
+            --golden: #E8A849;
+            --salmon-pink: #E8967D;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Source Sans 3', sans-serif;
+            background: var(--warm-cream);
+            color: var(--charcoal);
+            line-height: 1.6;
+            padding: 1.5rem;
+            max-width: 500px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            font-family: 'Fraunces', serif;
+            font-size: 2rem;
+            text-align: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .store-note {
+            text-align: center;
+            font-size: 0.9rem;
+            color: #666;
+            margin-bottom: 1.5rem;
+        }
+
+        .frequency-tag {
+            display: inline-block;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            padding: 0.2rem 0.6rem;
+            border-radius: 20px;
+            margin-left: 0.5rem;
+        }
+
+        .weekly {
+            background: var(--salmon-pink);
+            color: white;
+        }
+
+        .stock-up {
+            background: var(--forest);
+            color: white;
+        }
+
+        .section {
+            background: white;
+            border-radius: 16px;
+            padding: 1.25rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+
+        .section-title {
+            font-family: 'Fraunces', serif;
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid var(--soft-sage);
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .item {
+            display: flex;
+            align-items: flex-start;
+            padding: 0.6rem 0;
+            border-bottom: 1px solid #eee;
+            font-size: 1.05rem;
+            cursor: pointer;
+        }
+
+        .item:last-child {
+            border-bottom: none;
+        }
+
+        .checkbox {
+            width: 24px;
+            height: 24px;
+            border: 2px solid #ccc;
+            border-radius: 6px;
+            margin-right: 1rem;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            margin-top: 0.1rem;
+        }
+
+        .item.checked .checkbox {
+            background: var(--forest);
+            border-color: var(--forest);
+        }
+
+        .item.checked .checkbox::after {
+            content: '✓';
+            color: white;
+            font-weight: bold;
+        }
+
+        .item.checked .item-content {
+            text-decoration: line-through;
+            color: #999;
+        }
+
+        .item-content {
+            flex-grow: 1;
+        }
+
+        .item-name {
+            font-weight: 600;
+        }
+
+        .item-amount {
+            color: var(--deep-terra);
+            font-weight: 600;
+        }
+
+        .item-detail {
+            font-size: 0.85rem;
+            color: #666;
+            margin-top: 0.2rem;
+        }
+
+        .section-note {
+            font-size: 0.9rem;
+            color: var(--deep-terra);
+            font-style: italic;
+            margin-top: 0.75rem;
+            padding-top: 0.75rem;
+            border-top: 1px dashed #ddd;
+        }
+
+        .divider {
+            text-align: center;
+            font-family: 'Fraunces', serif;
+            font-size: 1.1rem;
+            color: #999;
+            margin: 1.5rem 0;
+            display: flex;
+            align-items: center;
+        }
+
+        .divider::before,
+        .divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: #ddd;
+        }
+
+        .divider span {
+            padding: 0 1rem;
+        }
+
+        .reset-btn {
+            display: block;
+            width: 100%;
+            padding: 1rem;
+            background: var(--charcoal);
+            color: var(--warm-cream);
+            border: none;
+            border-radius: 12px;
+            font-family: 'Source Sans 3', sans-serif;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 1rem;
+        }
+
+        .reset-btn:active {
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <h1>🛒 Shopping List</h1>
+    <p class="store-note">United Supermarkets, Canyon TX</p>
+
+    <div class="divider"><span>Buy Weekly</span></div>
+
+    <div class="section">
+        <div class="section-title">🥬 Produce <span class="frequency-tag weekly">Weekly</span></div>
+        <div class="item" onclick="toggle(this)">
+            <div class="checkbox"></div>
+            <div class="item-content">
+                <div><span class="item-name">Carrots</span> — <span class="item-amount">1 lb bag</span></div>
+                <div class="item-detail">Lasts 2+ weeks. Use on chicken day.</div>
+            </div>
+        </div>
+        <div class="item" onclick="toggle(this)">
+            <div class="checkbox"></div>
+            <div class="item-content">
+                <div><span class="item-name">Bell peppers</span> — <span class="item-amount">2–3</span></div>
+                <div class="item-detail">Any color. Lasts ~1 week. Works with all proteins.</div>
+            </div>
+        </div>
+        <div class="item" onclick="toggle(this)">
+            <div class="checkbox"></div>
+            <div class="item-content">
+                <div><span class="item-name">Zucchini</span> — <span class="item-amount">2 medium</span></div>
+                <div class="item-detail">Use within 4–5 days. Works with all proteins.</div>
+            </div>
+        </div>
+        <div class="item" onclick="toggle(this)">
+            <div class="checkbox"></div>
+            <div class="item-content">
+                <div><span class="item-name">Green beans</span> — <span class="item-amount">½ lb</span></div>
+                <div class="item-detail">Lasts ~1 week. Chicken or beef day.</div>
+            </div>
+        </div>
+        <div class="item" onclick="toggle(this)">
+            <div class="checkbox"></div>
+            <div class="item-content">
+                <div><span class="item-name">Broccoli</span> — <span class="item-amount">1 head or bag</span></div>
+                <div class="item-detail">Use within 4–5 days. Chicken or beef day. Moderate nickel—don't overdo.</div>
+            </div>
+        </div>
+        <div class="item" onclick="toggle(this)">
+            <div class="checkbox"></div>
+            <div class="item-content">
+                <div><span class="item-name">Cauliflower</span> — <span class="item-amount">1 head</span></div>
+                <div class="item-detail">Lasts ~1 week. Chicken day. Moderate nickel—don't overdo.</div>
+            </div>
+        </div>
+        <div class="item" onclick="toggle(this)">
+            <div class="checkbox"></div>
+            <div class="item-content">
+                <div><span class="item-name">Cherry tomatoes</span> — <span class="item-amount">1 pint</span></div>
+                <div class="item-detail">Lasts ~1 week. Add last 10–15 min (or at start for salmon).</div>
+            </div>
+        </div>
+        <div class="item" onclick="toggle(this)">
+            <div class="checkbox"></div>
+            <div class="item-content">
+                <div><span class="item-name">Lemon</span> — <span class="item-amount">1</span></div>
+                <div class="item-detail">For zest. Mediterranean seasoning.</div>
+            </div>
+        </div>
+        <div class="item" onclick="toggle(this)">
+            <div class="checkbox"></div>
+            <div class="item-content">
+                <div><span class="item-name">Fresh ginger</span> — <span class="item-amount">small knob</span></div>
+                <div class="item-detail">Asian-inspired. Freezes well—grate from frozen.</div>
+            </div>
+        </div>
+        <div class="section-note">Pick 3–4 vegetables per week based on which proteins you're cooking</div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">🥩 Meat & Seafood <span class="frequency-tag weekly">Weekly</span></div>
+        <div class="item" onclick="toggle(this)">
+            <div class="checkbox"></div>
+            <div class="item-content">
+                <div><span class="item-name">Chicken thighs</span> — <span class="item-amount">1.5 lbs</span></div>
+                <div class="item-detail">Bone-in, skin-on. Freeze if not cooking within 2 days.</div>
+            </div>
+        </div>
+        <div class="item" onclick="toggle(this)">
+            <div class="checkbox"></div>
+            <div class="item-content">
+                <div><span class="item-name">Ground beef</span> — <span class="item-amount">1 lb</span></div>
+                <div class="item-detail">80-85% lean. Freeze if not cooking within 2 days.</div>
+            </div>
+        </div>
+        <div class="item" onclick="toggle(this)">
+            <div class="checkbox"></div>
+            <div class="item-content">
+                <div><span class="item-name">Salmon</span> — <span class="item-amount">1 lb</span></div>
+                <div class="item-detail">Fillet. Most perishable—cook first or freeze.</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="divider"><span>Stock Up Once</span></div>
+
+    <div class="section">
+        <div class="section-title">🧊 Condiments/Refrigerated <span class="frequency-tag stock-up">Stock Up</span></div>
+        <div class="item" onclick="toggle(this)">
+            <div class="checkbox"></div>
+            <div class="item-content">
+                <div><span class="item-name">Dijon mustard</span> — <span class="item-amount">1 jar</span></div>
+                <div class="item-detail">Herby French. Refrigerate after opening. Lasts 1 year in fridge.</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">🫒 Oil & Vinegar Aisle <span class="frequency-tag stock-up">Stock Up</span></div>
+        <div class="item" onclick="toggle(this)">
+            <div class="checkbox"></div>
+            <div class="item-content">
+                <div><span class="item-name">Olive oil</span> — <span class="item-amount">16–32 oz bottle</span></div>
+                <div class="item-detail">Extra virgin. Use 1–2 tbsp per meal. Keeps 1–2 years unopened.</div>
+            </div>
+        </div>
+        <div class="item" onclick="toggle(this)">
+            <div class="checkbox"></div>
+            <div class="item-content">
+                <div><span class="item-name">Sesame oil</span> — <span class="item-amount">small bottle</span></div>
+                <div class="item-detail">Asian-inspired. Drizzle after cooking. Keeps 1+ year.</div>
+            </div>
+        </div>
+        <div class="item" onclick="toggle(this)">
+            <div class="checkbox"></div>
+            <div class="item-content">
+                <div><span class="item-name">Balsamic vinegar</span> — <span class="item-amount">small bottle</span></div>
+                <div class="item-detail">Italian seasoning. Drizzle after cooking. Keeps indefinitely.</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">🍚 Rice & Grains Aisle <span class="frequency-tag stock-up">Stock Up</span></div>
+        <div class="item" onclick="toggle(this)">
+            <div class="checkbox"></div>
+            <div class="item-content">
+                <div><span class="item-name">White rice</span> — <span class="item-amount">2–5 lb bag</span></div>
+                <div class="item-detail">Long grain. Keeps indefinitely in pantry.</div>
+            </div>
+        </div>
+        <div class="item" onclick="toggle(this)">
+            <div class="checkbox"></div>
+            <div class="item-content">
+                <div><span class="item-name">Brown rice</span> — <span class="item-amount">2 lb bag</span></div>
+                <div class="item-detail">Optional—to test if you like it cold. Keeps 6+ months.</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">🌏 International/Health Aisle <span class="frequency-tag stock-up">Stock Up</span></div>
+        <div class="item" onclick="toggle(this)">
+            <div class="checkbox"></div>
+            <div class="item-content">
+                <div><span class="item-name">Coconut aminos</span> — <span class="item-amount">1 bottle</span></div>
+                <div class="item-detail">Asian-inspired. Soy sauce substitute (no nickel). Check Asian or health food section.</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">🧂 Spice Aisle <span class="frequency-tag stock-up">Stock Up</span></div>
+        
+        <div class="item" onclick="toggle(this)">
+            <div class="checkbox"></div>
+            <div class="item-content">
+                <div><span class="item-name">Black pepper</span></div>
+                <div class="item-detail">Basic. Mediterranean + general use.</div>
+            </div>
+        </div>
+        <div class="item" onclick="toggle(this)">
+            <div class="checkbox"></div>
+            <div class="item-content">
+                <div><span class="item-name">Oregano</span> — <span class="item-amount">dried</span></div>
+                <div class="item-detail">Mediterranean + Italian.</div>
+            </div>
+        </div>
+        <div class="item" onclick="toggle(this)">
+            <div class="checkbox"></div>
+            <div class="item-content">
+                <div><span class="item-name">Cumin</span> — <span class="item-amount">ground</span></div>
+                <div class="item-detail">Southwestern + Middle Eastern.</div>
+            </div>
+        </div>
+        <div class="item" onclick="toggle(this)">
+            <div class="checkbox"></div>
+            <div class="item-content">
+                <div><span class="item-name">Chili powder</span></div>
+                <div class="item-detail">Southwestern.</div>
+            </div>
+        </div>
+        <div class="item" onclick="toggle(this)">
+            <div class="checkbox"></div>
+            <div class="item-content">
+                <div><span class="item-name">Smoked paprika</span></div>
+                <div class="item-detail">Southwestern. Different from regular paprika—smokier.</div>
+            </div>
+        </div>
+        <div class="item" onclick="toggle(this)">
+            <div class="checkbox"></div>
+            <div class="item-content">
+                <div><span class="item-name">Thyme</span> — <span class="item-amount">dried</span></div>
+                <div class="item-detail">Herby French.</div>
+            </div>
+        </div>
+        <div class="item" onclick="toggle(this)">
+            <div class="checkbox"></div>
+            <div class="item-content">
+                <div><span class="item-name">Rosemary</span> — <span class="item-amount">dried</span></div>
+                <div class="item-detail">Herby French.</div>
+            </div>
+        </div>
+        <div class="item" onclick="toggle(this)">
+            <div class="checkbox"></div>
+            <div class="item-content">
+                <div><span class="item-name">Coriander</span> — <span class="item-amount">ground</span></div>
+                <div class="item-detail">Middle Eastern.</div>
+            </div>
+        </div>
+        <div class="item" onclick="toggle(this)">
+            <div class="checkbox"></div>
+            <div class="item-content">
+                <div><span class="item-name">Turmeric</span> — <span class="item-amount">ground</span></div>
+                <div class="item-detail">Middle Eastern. Stains everything yellow—careful.</div>
+            </div>
+        </div>
+        <div class="item" onclick="toggle(this)">
+            <div class="checkbox"></div>
+            <div class="item-content">
+                <div><span class="item-name">Paprika</span> — <span class="item-amount">regular</span></div>
+                <div class="item-detail">Middle Eastern. Different from smoked paprika.</div>
+            </div>
+        </div>
+        <div class="item" onclick="toggle(this)">
+            <div class="checkbox"></div>
+            <div class="item-content">
+                <div><span class="item-name">Basil</span> — <span class="item-amount">dried</span></div>
+                <div class="item-detail">Italian.</div>
+            </div>
+        </div>
+        <div class="section-note">All dried spices keep 1+ year in a cool, dark place. Only buy for 3–4 rotations you want to try.</div>
+    </div>
+
+    <button class="reset-btn" onclick="resetAll()">Reset All</button>
+
+    <script>
+        function toggle(item) {
+            item.classList.toggle('checked');
+            saveState();
+        }
+
+        function resetAll() {
+            document.querySelectorAll('.item').forEach(item => {
+                item.classList.remove('checked');
+            });
+            saveState();
+        }
+
+        function saveState() {
+            const checked = [];
+            document.querySelectorAll('.item').forEach((item, index) => {
+                if (item.classList.contains('checked')) {
+                    checked.push(index);
+                }
+            });
+            localStorage.setItem('shoppingList', JSON.stringify(checked));
+        }
+
+        function loadState() {
+            const saved = localStorage.getItem('shoppingList');
+            if (saved) {
+                const checked = JSON.parse(saved);
+                document.querySelectorAll('.item').forEach((item, index) => {
+                    if (checked.includes(index)) {
+                        item.classList.add('checked');
+                    }
+                });
+            }
+        }
+
+        loadState();
+    </script>
+</body>
+</html>
