@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="A small collection of games by hiddenwaffle. Pick something and play.">
+  <meta name="description" content="Games and small tools by hiddenwaffle.">
   <meta name="theme-color" content="#191c1a">
   <title>hiddenwaffle · Games &amp; other stuff</title>
   <link rel="icon" href="./favicon.ico">
@@ -50,10 +50,12 @@
     .lighting { --accent: #a7c6b5; }
     .mazing { --accent: #b9b3df; }
     .starwars { --accent: #e7aa8d; }
+    .udm50 { --accent: #91c6d6; }
     .art { position: relative; display: grid; place-items: center; height: 210px; overflow: hidden; color: var(--accent); background-color: #292d25; background-image: radial-gradient(#efc66c18 1px, transparent 1px); background-size: 16px 16px; border-bottom: 1px solid var(--line); }
     .lighting .art { background-color: #24302b; background-image: radial-gradient(#a7c6b518 1px, transparent 1px); }
     .mazing .art { background-color: #2b2836; background-image: radial-gradient(#b9b3df18 1px, transparent 1px); }
     .starwars .art { background-color: #302a27; background-image: radial-gradient(#e7aa8d18 1px, transparent 1px); }
+    .udm50 .art { background-color: #243039; background-image: radial-gradient(#91c6d618 1px, transparent 1px); }
     .card-number { position: absolute; top: 19px; left: 22px; font-size: 10px; opacity: .7; }
     .art > svg { width: 244px; height: 166px; max-width: 90%; overflow: visible; }
     .card-info { padding: 23px 25px 25px; }
@@ -64,6 +66,7 @@
     .arrow svg { width: 15px; height: 15px; }
     .game:hover .arrow { background: var(--accent); border-color: var(--accent); color: var(--background); }
     .description { color: var(--muted); font-size: 13px; line-height: 1.6; margin: 8px 0 0; }
+    .repository-label { display: inline-block; margin-top: 16px; color: var(--accent); font-size: 11px; text-decoration: underline; text-underline-offset: 4px; }
     .footer { display: flex; justify-content: space-between; align-items: center; gap: 24px; border-top: 1px solid var(--line); margin-top: 48px; padding: 26px 0 32px; color: var(--muted); font-size: 11px; line-height: 1.6; }
     .footer p { margin: 0; }
     .footer a { text-underline-offset: 4px; }
@@ -193,6 +196,34 @@
               <p class="card-kind">Text adventure</p>
               <div class="card-heading"><h3 id="starwars-title">starwars</h3><span class="arrow" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 10h12m-5-5 5 5-5 5"/></svg></span></div>
               <p class="description" id="starwars-description">Star Wars text adventure (port)</p>
+            </div>
+          </a>
+        </div>
+      </section>
+      <section class="game-section" aria-labelledby="tools-title">
+        <h2 class="section-label" id="tools-title"><span>Tools</span><span>1 tool</span></h2>
+        <div class="games">
+          <a class="game udm50" href="https://github.com/hiddenwaffle/udm50" aria-labelledby="udm50-title udm50-platform udm50-description udm50-repository">
+            <div class="art" aria-hidden="true">
+              <span class="card-number">05</span>
+              <svg viewBox="0 0 244 166" fill="none">
+                <rect x="22" y="20" width="200" height="44" rx="10" fill="#1d272b" stroke="currentColor" stroke-width="2"/>
+                <circle cx="43" cy="40" r="6" stroke="currentColor" stroke-width="2"/>
+                <path d="m48 45 5 5M66 42h94" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                <path d="M199 35v10h-12m4-4-4 4 4 4" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                <path d="M121 71v12m-4-4 4 4 4-4" stroke="currentColor" stroke-opacity=".5" stroke-width="1.5"/>
+                <rect x="52" y="91" width="170" height="62" rx="6" fill="#1d272b" stroke="currentColor" stroke-opacity=".6" stroke-width="1.5"/>
+                <path d="M52 106h170" stroke="currentColor" stroke-opacity=".3"/>
+                <g fill="currentColor" fill-opacity=".6"><circle cx="62" cy="99" r="1.5"/><circle cx="69" cy="99" r="1.5"/><circle cx="76" cy="99" r="1.5"/></g>
+                <path d="M68 120h108M68 130h135M68 140h86" stroke="currentColor" stroke-opacity=".5" stroke-width="2"/>
+                <path d="m30 115 2-6 2 6 6 2-6 2-2 6-2-6-6-2Z" fill="currentColor"/>
+              </svg>
+            </div>
+            <div class="card-info">
+              <p class="card-kind" id="udm50-platform">macOS · GitHub</p>
+              <div class="card-heading"><h3 id="udm50-title">udm50</h3><span class="arrow" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 10h12m-5-5 5 5-5 5"/></svg></span></div>
+              <p class="description" id="udm50-description">A Spotlight-style launcher for Google AI Mode, with a dedicated answer window and Markdown export.</p>
+              <span class="repository-label" id="udm50-repository">View repository</span>
             </div>
           </a>
         </div>
