@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A small collection of games by hiddenwaffle.">
+  <meta name="theme-color" content="#f4f0e6">
+  <title>hiddenwaffle · Paper arcade</title>
+  <link rel="icon" href="../favicon.ico">
+  <style>
+* { box-sizing: border-box; }
+body { margin: 0; -webkit-font-smoothing: antialiased; }
+a { color: inherit; }
+a:focus-visible { outline: 3px solid currentColor; outline-offset: 6px; }
+svg { display: block; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; scroll-behavior: auto !important; } }
+
+:root { color-scheme: light; --paper: #f4f0e6; --ink: #292d28; --muted: #62675d; --rust: #a13e28; --line: #c5c5b6; }
+body { background: var(--paper); color: var(--ink); font-family: Georgia, "Times New Roman", serif; }
+::selection { background: #e7b998; }
+.wrap { width: min(1100px, calc(100% - 96px)); margin: auto; }
+header { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 30px 0; border-bottom: 1px solid var(--ink); }
+.brand { font-size: 24px; letter-spacing: -1px; font-weight: bold; text-decoration: none; }
+header nav, .kicker, .catalog-heading, .number, .category, footer { font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; }
+header nav { display: flex; gap: 24px; font-size: 12px; }
+header nav a { text-decoration: none; }
+header nav a:hover { text-decoration: underline; text-underline-offset: 5px; }
+.intro { position: relative; padding: 70px 0 62px; display: grid; grid-template-columns: 1fr 230px; gap: 32px; align-items: end; }
+.kicker { color: var(--rust); font-size: 11px; letter-spacing: 1.8px; text-transform: uppercase; margin: 0 0 26px; }
+h1 { font-size: clamp(64px, 9vw, 120px); font-weight: normal; letter-spacing: -.065em; line-height: .98; margin: 0; }
+h1 em { color: var(--rust); font-weight: normal; }
+.intro-note { color: var(--muted); font-size: 18px; line-height: 1.65; margin: 0 0 6px; }
+.catalog-heading { border-top: 1px solid var(--ink); border-bottom: 1px solid var(--ink); padding: 14px 0; display: flex; justify-content: space-between; font-size: 10px; font-weight: normal; letter-spacing: 1.4px; text-transform: uppercase; margin: 0; }
+.game { display: grid; grid-template-columns: 44px 1fr 215px 120px 30px; gap: 20px; align-items: center; min-height: 132px; padding: 15px 0; border-bottom: 1px solid var(--line); text-decoration: none; transition: color .18s ease, background .18s ease; }
+.game:hover { color: var(--rust); background: #eae5d7; }
+.number { color: var(--rust); font-size: 11px; align-self: start; padding-top: 27px; }
+h3 { font-weight: normal; font-size: clamp(30px, 4vw, 46px); letter-spacing: -1.5px; margin: 0; }
+.category { color: var(--muted); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; margin: 9px 0 0; }
+.description { color: var(--muted); font-size: 15px; line-height: 1.55; margin: 0; }
+.illustration { color: var(--rust); }
+.illustration svg { width: 120px; height: 90px; }
+.arrow { color: var(--rust); font-family: system-ui, sans-serif; font-size: 24px; justify-self: end; }
+footer { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 28px 0 38px; color: var(--muted); font-size: 10px; line-height: 1.6; }
+footer p { margin: 0; }
+footer a { text-underline-offset: 4px; }
+.pi { font-family: Georgia, serif; font-size: 22px; text-decoration: none; padding: 8px; }
+@media (max-width: 900px) {
+  .wrap { width: calc(100% - 56px); }
+  .intro { grid-template-columns: 1fr 190px; }
+  .game { grid-template-columns: 30px 1fr 175px 30px; gap: 14px; }
+  .illustration { display: none; }
+}
+@media (max-width: 600px) {
+  .wrap { width: calc(100% - 40px); }
+  header { padding: 25px 0; }
+  .brand { font-size: 21px; }
+  header nav { gap: 15px; font-size: 10px; }
+  .intro { padding: 48px 0 38px; grid-template-columns: 1fr; gap: 28px; }
+  h1 { font-size: clamp(58px, 14vw, 84px); }
+  .intro-note { max-width: 300px; font-size: 16px; }
+  .game { grid-template-columns: 24px 1fr 26px; gap: 12px; padding-block: 24px; }
+  .number { padding-top: 8px; grid-row: 1 / 3; }
+  .game-copy { grid-column: 2; }
+  h3 { font-size: 36px; }
+  .description { grid-column: 2; grid-row: 2; font-size: 13px; }
+  .arrow { grid-column: 3; grid-row: 1 / 3; }
+  footer { align-items: start; }
+}
+
+  </style>
+</head>
+<body id="top">
+<div class="wrap">
+  <header><a class="brand" href="#top">hiddenwaffle.</a><nav aria-label="Main"><a href="#games">Games</a><a href="https://github.com/hiddenwaffle">GitHub ↗</a></nav></header>
+  <main>
+    <section class="intro" aria-labelledby="page-title">
+      <div><p class="kicker">Games &amp; other stuff</p><h1 id="page-title">A few things<br>to <em>play.</em></h1></div>
+      <p class="intro-note">A small collection of games.<br>For a little time<br>well wasted.</p>
+    </section>
+    <section id="games" aria-labelledby="games-title"><h2 class="catalog-heading" id="games-title"><span>The collection</span><span>Four games</span></h2>
+<a class="game" href="../matching" aria-labelledby="matching-title matching-description">
+      <span class="number" aria-hidden="true">01</span>
+      <div class="game-copy"><h3 id="matching-title">matching</h3><p class="category">Cards</p></div>
+      <p class="description" id="matching-description">Super Mario Bros. 3 card matching</p>
+      <div class="illustration" aria-hidden="true"><svg viewBox="0 0 244 166" fill="none">
+                <g transform="translate(53 25) rotate(-12 42 56)">
+                  <rect width="84" height="112" rx="9" fill="#f4f0e6" stroke="currentColor" stroke-width="2"/>
+                  <rect x="7" y="7" width="70" height="98" rx="4" stroke="currentColor" stroke-opacity=".35"/>
+                  <path d="m42 38 14 19-14 19-14-19Z" fill="currentColor"/>
+                </g>
+                <g transform="translate(112 30) rotate(12 42 56)">
+                  <rect width="84" height="112" rx="9" fill="#f4f0e6" stroke="currentColor" stroke-width="2"/>
+                  <rect x="7" y="7" width="70" height="98" rx="4" stroke="currentColor" stroke-opacity=".35"/>
+                  <path d="m42 38 14 19-14 19-14-19Z" fill="currentColor"/>
+                </g>
+                <path d="M39 30v10m-5-5h10m158 94v10m-5-5h10" stroke="currentColor" stroke-width="2"/>
+              </svg></div>
+      <span class="arrow" aria-hidden="true">↗</span>
+    </a>
+<a class="game" href="../lighting" aria-labelledby="lighting-title lighting-description">
+      <span class="number" aria-hidden="true">02</span>
+      <div class="game-copy"><h3 id="lighting-title">lighting</h3><p class="category">Blocks</p></div>
+      <p class="description" id="lighting-description">Tetris clone vs. AI</p>
+      <div class="illustration" aria-hidden="true"><svg viewBox="0 0 244 166" fill="none">
+                <path d="M47 17v130h150V17" stroke="currentColor" stroke-opacity=".25" stroke-width="2"/>
+                <g fill="currentColor" fill-opacity=".85" stroke="#f4f0e6" stroke-width="3">
+                  <rect x="50" y="120" width="28" height="25" rx="3"/><rect x="79" y="120" width="28" height="25" rx="3"/>
+                  <rect x="108" y="120" width="28" height="25" rx="3"/><rect x="79" y="94" width="28" height="25" rx="3"/>
+                </g>
+                <g fill="currentColor" fill-opacity=".4" stroke="#f4f0e6" stroke-width="3">
+                  <rect x="137" y="120" width="28" height="25" rx="3"/><rect x="166" y="120" width="28" height="25" rx="3"/>
+                  <rect x="166" y="94" width="28" height="25" rx="3"/><rect x="166" y="68" width="28" height="25" rx="3"/>
+                </g>
+                <g fill="currentColor" stroke="#f4f0e6" stroke-width="3">
+                  <rect x="79" y="17" width="28" height="25" rx="3"/><rect x="108" y="17" width="28" height="25" rx="3"/>
+                  <rect x="108" y="43" width="28" height="25" rx="3"/><rect x="137" y="43" width="28" height="25" rx="3"/>
+                </g>
+                <path d="M122 79v14m-4-4 4 4 4-4" stroke="currentColor" stroke-opacity=".5" stroke-width="1.5"/>
+              </svg></div>
+      <span class="arrow" aria-hidden="true">↗</span>
+    </a>
+<a class="game" href="../mazing" aria-labelledby="mazing-title mazing-description">
+      <span class="number" aria-hidden="true">03</span>
+      <div class="game-copy"><h3 id="mazing-title">mazing</h3><p class="category">Maze</p></div>
+      <p class="description" id="mazing-description">Pac-Man clone</p>
+      <div class="illustration" aria-hidden="true"><svg viewBox="0 0 244 166" fill="none">
+                <g stroke="currentColor" stroke-opacity=".45" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M24 60V29a6 6 0 0 1 6-6h72v28h40V23h72a6 6 0 0 1 6 6v31M24 106v31a6 6 0 0 0 6 6h72v-28h40v28h72a6 6 0 0 0 6-6v-31"/>
+                  <path d="M44 48h36m84 0h36M44 118h36m84 0h36"/>
+                </g>
+                <path d="M105 64a28 28 0 1 0 0 38L83 83Z" fill="currentColor"/>
+                <circle cx="83" cy="68" r="3" fill="#f4f0e6"/>
+                <g fill="currentColor"><circle cx="129" cy="83" r="3"/><circle cx="152" cy="83" r="3"/><circle cx="175" cy="83" r="3"/><circle cx="198" cy="83" r="3"/></g>
+              </svg></div>
+      <span class="arrow" aria-hidden="true">↗</span>
+    </a>
+<a class="game" href="../starwars" aria-labelledby="starwars-title starwars-description">
+      <span class="number" aria-hidden="true">04</span>
+      <div class="game-copy"><h3 id="starwars-title">starwars</h3><p class="category">Text adventure</p></div>
+      <p class="description" id="starwars-description">Star Wars text adventure (port)</p>
+      <div class="illustration" aria-hidden="true"><svg viewBox="0 0 244 166" fill="none">
+                <rect x="29" y="29" width="186" height="112" rx="7" fill="#f4f0e6" stroke="currentColor" stroke-width="2"/>
+                <path d="M29 51h186" stroke="currentColor" stroke-opacity=".4"/>
+                <g fill="currentColor" fill-opacity=".6"><circle cx="41" cy="40" r="2"/><circle cx="50" cy="40" r="2"/><circle cx="59" cy="40" r="2"/></g>
+                <path d="m49 73 9 8-9 8m19 0h25" stroke="currentColor" stroke-width="3"/>
+                <path d="M49 106h99m-99 10h67" stroke="currentColor" stroke-opacity=".3" stroke-width="3"/>
+                <path d="m191 14 2-5 2 5 5 2-5 2-2 5-2-5-5-2Z" fill="currentColor"/>
+                <circle cx="17" cy="126" r="2" fill="currentColor"/>
+              </svg></div>
+      <span class="arrow" aria-hidden="true">↗</span>
+    </a>
+    </section>
+  </main>
+  <footer><p>hiddenwaffle / Games &amp; other stuff<br><a href="index.html">Compare designs</a></p><a class="pi" href="#top" aria-label="Back to top">π</a></footer>
+</div>
+</body>
+</html>
