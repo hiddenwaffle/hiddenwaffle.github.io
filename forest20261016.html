@@ -1,0 +1,1287 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Border meadow print test</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
+    background: #e9e2cf; overscroll-behavior: none; touch-action: none;
+    -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; text-size-adjust: 100%;
+  }
+  #game { position: fixed; inset: 0; width: 100dvw; height: 100dvh; overflow: hidden; touch-action: none; }
+  #game canvas { display: block; touch-action: none; cursor: grab; }
+  /* DOM overlay: outside the filtered container, so never dotted. */
+  .ov { position: fixed; z-index: 5; font: 12px/1.35 ui-monospace, Menlo, Consolas, monospace; color: #fff; background: rgba(0,0,0,0.72); border-radius: 6px; }
+  #printBtn { left: calc(env(safe-area-inset-left) + 10px); bottom: calc(env(safe-area-inset-bottom) + 10px); padding: 10px 14px; border: 0; font-size: 14px; touch-action: manipulation; }
+  #readout { left: calc(env(safe-area-inset-left) + 8px); top: calc(env(safe-area-inset-top) + 8px); padding: 6px 8px; max-width: 80vw; white-space: pre; touch-action: manipulation; }
+  #note { right: calc(env(safe-area-inset-right) + 8px); top: calc(env(safe-area-inset-top) + 8px); padding: 6px 8px; max-width: 60vw; display: none; background: rgba(160,0,60,0.85); }
+  #msg { position: fixed; inset: 0; z-index: 10; display: none; align-items: center; justify-content: center; padding: 24px; box-sizing: border-box; background: #fff; color: #900; font: 16px/1.4 sans-serif; white-space: pre-wrap; text-align: center; }
+</style>
+</head>
+<body>
+<div id="game"></div>
+<button id="printBtn" class="ov" type="button">Print: on</button>
+<div id="readout" class="ov"></div>
+<div id="note" class="ov"></div>
+<div id="msg"></div>
+<script src="https://cdn.jsdelivr.net/npm/pixi.js@8.20.1/dist/pixi.min.js"></script>
+<script>
+(() => {
+'use strict';
+
+// ---------------------------------------------------------------------------------------------
+// Plain messages
+
+function fail(text) {
+  const m = document.getElementById('msg');
+  m.textContent = text;
+  m.style.display = 'flex';
+}
+const failedArt = [];
+function noteFailedArt() {
+  const n = document.getElementById('note');
+  n.textContent = 'Image did not load: ' + failedArt.join(', ') + '. A hot pink box stands in for it.';
+  n.style.display = 'block';
+}
+
+if (!window.PIXI) {
+  fail('Pixi did not load from cdn.jsdelivr.net (pixi.js 8.20.1). Check the connection and reload the page.');
+  return;
+}
+const { Application, Container, Graphics, Sprite, Texture, Assets, Filter, GlProgram, UniformGroup, defaultFilterVert } = PIXI;
+
+// ---------------------------------------------------------------------------------------------
+// src/render/palette.ts (only what this slice uses)
+
+const PAPER = 0xe9e2cf;
+const INK = 0x1b1a1f;
+const GRASS = 0x7fbf4d;
+const GRASS_DARK = 0x5f9a38;
+const WATER = 0x4aa3df;
+const SAND = 0xd9b77a;
+const PATH = 0xc79a5b;
+const PAVEMENT = 0xbdb8ad;
+const WALL_FACE = 0xe0dccf;
+const WOOD = 0x9a6a3a;
+
+// ---------------------------------------------------------------------------------------------
+// src/render/halftone.ts
+
+const fragment = /* glsl */ `
+in vec2 vTextureCoord;
+out vec4 finalColor;
+
+uniform sampler2D uTexture;
+uniform highp vec4 uInputSize;
+
+// uInputSize is in CSS pixels, so the dot size and shift are too. uRes is
+// device pixels per CSS pixel, used to keep edges about one device pixel soft.
+uniform float uDot;
+uniform float uRes;
+uniform vec3 uPaper;
+uniform float uStrength;
+uniform vec2 uShift;
+uniform float uGrain;
+
+// Colour without premultiplied alpha. Fully transparent pixels read as bare paper,
+// so they print no ink.
+vec3 sampleRGB(vec2 uv) {
+  vec4 c = texture(uTexture, uv);
+  return c.a > 0.001 ? c.rgb / c.a : uPaper;
+}
+
+vec4 toCMYK(vec3 rgb) {
+  float k = 1.0 - max(max(rgb.r, rgb.g), rgb.b);
+  float inv = 1.0 - k;
+  vec3 cmy = inv > 0.0001 ? (vec3(1.0) - rgb - vec3(k)) / inv : vec3(0.0);
+  return vec4(cmy, k);
+}
+
+float screenDot(vec2 px, float angle, float value) {
+  float s = sin(angle);
+  float c = cos(angle);
+  vec2 p = mat2(c, s, -s, c) * px / uDot;
+  vec2 cell = fract(p) - 0.5;
+  float d = length(cell);
+  // A dot of radius 0.564 * sqrt(v) covers v of its cell; a little more reads punchier.
+  float r = sqrt(clamp(value, 0.0, 1.0)) * 0.6;
+  float aa = 0.8 / (uDot * uRes);
+  return 1.0 - smoothstep(r - aa, r + aa, d);
+}
+
+float hash(vec2 p) {
+  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+void main() {
+  float alpha = texture(uTexture, vTextureCoord).a;
+  if (alpha <= 0.001) {
+    finalColor = vec4(0.0);
+    return;
+  }
+  vec2 px = vTextureCoord * uInputSize.xy;
+  vec2 texel = uInputSize.zw;
+  vec3 base = sampleRGB(vTextureCoord);
+  vec4 plateC = toCMYK(sampleRGB(vTextureCoord + uShift * texel));
+  vec4 plateM = toCMYK(sampleRGB(vTextureCoord - uShift * texel));
+  vec4 plate = toCMYK(base);
+
+  float cyan = screenDot(px, 0.2618, plateC.x);
+  float magenta = screenDot(px, 1.3090, plateM.y);
+  float yellow = screenDot(px, 0.0, plate.z);
+  // Black prints solid for dark lines and only screens in darker tones, so
+  // bright flat colours stay clean.
+  float kv = plate.w;
+  float black = max(smoothstep(0.62, 0.78, kv), screenDot(px, 0.7854, smoothstep(0.3, 1.0, kv) * 0.8));
+
+  vec3 col = uPaper;
+  col *= mix(vec3(1.0), vec3(0.0, 0.62, 0.88), cyan);
+  col *= mix(vec3(1.0), vec3(0.93, 0.12, 0.52), magenta);
+  col *= mix(vec3(1.0), vec3(1.0, 0.93, 0.08), yellow);
+  col *= mix(vec3(1.0), vec3(0.11, 0.10, 0.12), black);
+  col += (hash(floor(px * uRes)) - 0.5) * uGrain;
+
+  finalColor = vec4(mix(base, col, uStrength) * alpha, alpha);
+}
+`;
+
+const PRINT = { strength: 0.15, dotScale: 0.55, grain: 0, shift: 0.1 };
+
+function rgb(n) {
+  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+}
+
+class HalftoneFilter extends Filter {
+  constructor(opts) {
+    const glProgram = GlProgram.from({ vertex: defaultFilterVert, fragment, name: 'halftone-filter' });
+    super({
+      glProgram,
+      resources: {
+        halftoneUniforms: new UniformGroup({
+          uDot: { value: opts.dot * PRINT.dotScale, type: 'f32' },
+          uRes: { value: opts.resolution, type: 'f32' },
+          uPaper: { value: new Float32Array(rgb(opts.paper)), type: 'vec3<f32>' },
+          uStrength: { value: opts.strength, type: 'f32' },
+          uShift: { value: new Float32Array([0.6 * PRINT.shift, 0.35 * PRINT.shift]), type: 'vec2<f32>' },
+          uGrain: { value: PRINT.grain, type: 'f32' },
+        }),
+      },
+    });
+    this.resolution = opts.resolution;
+    this.deviceRes = opts.resolution;
+  }
+
+  get u() {
+    return this.resources.halftoneUniforms.uniforms;
+  }
+
+  setDot(cssPx, resolution) {
+    this.u.uDot = cssPx * PRINT.dotScale;
+    this.u.uRes = resolution;
+    this.resolution = resolution;
+    this.deviceRes = resolution;
+  }
+
+  get strength() {
+    return this.u.uStrength;
+  }
+
+  set strength(v) {
+    this.u.uStrength = v;
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// src/engine/layout.ts
+
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const MAX_ASPECT = 16 / 9;
+const MIN_ASPECT = 9 / 20;
+
+function computeLayout(vw, vh, safe = { top: 0, right: 0, bottom: 0, left: 0 }, textSize = 1) {
+  const short = Math.min(vw, vh);
+  const orientation = vh > vw ? 'portrait' : 'landscape';
+  const compact = short < 560;
+  const margin = Math.round(clamp(short * 0.02, 5, 20));
+  const unit = Math.round(clamp(short / 30, 13, 22) * textSize);
+
+  const left = safe.left + margin;
+  const right = vw - safe.right - margin;
+  let top = safe.top + margin;
+  const bottom = vh - safe.bottom - margin;
+
+  let masthead = null;
+  const mastheadH = compact ? (orientation === 'portrait' ? clamp(vh * 0.06, 30, 52) : 0) : clamp(vh * 0.085, 48, 104);
+  if (mastheadH > 0) {
+    masthead = { x: left, y: top, w: right - left, h: Math.round(mastheadH) };
+    top += masthead.h + Math.round(margin * 0.6);
+  }
+
+  const area = { x: left, y: top, w: Math.max(1, right - left), h: Math.max(1, bottom - top) };
+  let panel = { ...area };
+  const columns = [];
+  let footer = null;
+  const aspect = area.w / area.h;
+
+  if (aspect > MAX_ASPECT) {
+    const w = Math.round(area.h * MAX_ASPECT);
+    const spare = area.w - w;
+    const gap = margin;
+    const colW = Math.floor((spare - gap * 2) / 2);
+    panel = { x: area.x + Math.floor(spare / 2), y: area.y, w, h: area.h };
+    if (colW >= 90) {
+      columns.push({ x: area.x, y: area.y, w: colW, h: area.h });
+      columns.push({ x: panel.x + panel.w + gap, y: area.y, w: colW, h: area.h });
+    }
+  } else if (aspect < MIN_ASPECT) {
+    const h = Math.round(area.w / MIN_ASPECT);
+    panel = { x: area.x, y: area.y, w: area.w, h };
+    footer = { x: area.x, y: area.y + h + margin, w: area.w, h: area.h - h - margin };
+  }
+
+  return { vw, vh, orientation, compact, margin, masthead, panel, columns, footer, unit };
+}
+
+function expandedPanel(l, safe) {
+  const w = Math.max(1, l.vw - safe.left - safe.right), h = Math.max(1, l.vh - safe.top - safe.bottom);
+  const scale = Math.min(w / l.panel.w, h / l.panel.h);
+  const pw = l.panel.w * scale, ph = l.panel.h * scale;
+  return { x: safe.left + (w - pw) / 2, y: safe.top + (h - ph) / 2, w: pw, h: ph };
+}
+
+function readSafeInsets() {
+  const probe = document.createElement('div');
+  probe.style.cssText =
+    'position:fixed;visibility:hidden;pointer-events:none;' +
+    'padding-top:env(safe-area-inset-top);padding-right:env(safe-area-inset-right);' +
+    'padding-bottom:env(safe-area-inset-bottom);padding-left:env(safe-area-inset-left);';
+  document.body.appendChild(probe);
+  const cs = getComputedStyle(probe);
+  const insets = {
+    top: parseFloat(cs.paddingTop) || 0,
+    right: parseFloat(cs.paddingRight) || 0,
+    bottom: parseFloat(cs.paddingBottom) || 0,
+    left: parseFloat(cs.paddingLeft) || 0,
+  };
+  probe.remove();
+  return insets;
+}
+
+function viewportSize() {
+  const vv = window.visualViewport;
+  if (vv) return { w: Math.round(vv.width), h: Math.round(vv.height) };
+  return { w: window.innerWidth, h: window.innerHeight };
+}
+
+function thumbReach(l) {
+  return l.orientation === 'portrait' && l.compact;
+}
+
+// ---------------------------------------------------------------------------------------------
+// src/engine/turn.ts (the upright lock)
+
+const PHONE_SHORT_SIDE = 600;
+const STALE_MS = 1000;
+
+function quarter(a) {
+  if (typeof a !== 'number' || !Number.isFinite(a)) return null;
+  const q = ((Math.round(a) % 360) + 360) % 360;
+  return q === 0 || q === 90 || q === 180 || q === 270 ? q : null;
+}
+
+function chooseTurn(o) {
+  if (!o.phone) return 0;
+  const landscape = o.vw > o.vh;
+  const a = o.angle;
+  if (landscape && (a === 90 || a === 270)) return a;
+  if (!landscape && (a === 0 || a === 180)) return a;
+  if (a !== null && !o.fresh) return 0;
+  if (landscape) return o.last === 90 || o.last === 270 ? o.last : 90;
+  return o.last === 180 ? 180 : 0;
+}
+
+function readingIsFresh(o) {
+  if (o.now - o.turnedAt >= STALE_MS) return false;
+  const at = o.sizeAtTurn;
+  return at !== null && at[0] === o.size[0] && at[1] === o.size[1];
+}
+
+function uprightSize(t, cw, ch) {
+  return t === 90 || t === 270 ? [ch, cw] : [cw, ch];
+}
+
+function rootPlacement(t, cw, ch) {
+  if (t === 90) return { rotation: -Math.PI / 2, x: 0, y: ch };
+  if (t === 270) return { rotation: Math.PI / 2, x: cw, y: 0 };
+  if (t === 180) return { rotation: Math.PI, x: cw, y: ch };
+  return { rotation: 0, x: 0, y: 0 };
+}
+
+function turnInsets(s, t) {
+  if (t === 90) return { top: s.left, right: s.top, bottom: s.right, left: s.bottom };
+  if (t === 270) return { top: s.right, right: s.bottom, bottom: s.left, left: s.top };
+  if (t === 180) return { top: s.bottom, right: s.left, bottom: s.top, left: s.right };
+  return { ...s };
+}
+
+function readScreen() {
+  const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+  const short = Math.min(screen.width, screen.height);
+  const legacy = window.orientation;
+  const angle = quarter((screen.orientation && screen.orientation.angle) ?? legacy);
+  return { phone: coarse && short > 0 && short < PHONE_SHORT_SIDE, angle };
+}
+
+// ---------------------------------------------------------------------------------------------
+// src/engine/loop.ts
+
+class FixedLoop {
+  constructor(update, render) {
+    this.step = 1 / 60;
+    this.maxFrame = 0.25;
+    this.timeScale = 1;
+    this.paused = false;
+    this.time = 0;
+    this.acc = 0;
+    this.update = update;
+    this.render = render;
+  }
+
+  tick(realDt) {
+    if (!this.paused) {
+      this.acc += Math.min(realDt, this.maxFrame) * this.timeScale;
+      let steps = 0;
+      while (this.acc >= this.step && steps < 60) {
+        this.update(this.step);
+        this.time += this.step;
+        this.acc -= this.step;
+        steps++;
+      }
+    }
+    this.render();
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Reduced motion: the game's setting defaults to the system's.
+
+const motion = { reduced: typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches };
+
+// ---------------------------------------------------------------------------------------------
+// src/content/terrain.ts
+
+const TILE = 32;
+const TERRAINS = [
+  { id: 'void', color: 0x000000, solid: true, world: 'arcade' },
+  { id: 'arcade_floor', color: 0x07070d, solid: false, world: 'arcade' },
+  { id: 'arcade_wall', color: 0x2c55ff, solid: true, world: 'arcade' },
+  { id: 'house_floor', color: 0x140a1a, solid: false, world: 'arcade' },
+  { id: 'house_wall', color: 0xff4fa3, solid: true, world: 'arcade' },
+  { id: 'grass', color: 0x7fbf4d, solid: false, world: 'print' },
+  { id: 'grass_dark', color: 0x5f9a38, solid: false, world: 'print' },
+  { id: 'water', color: 0x4aa3df, solid: true, world: 'print' },
+  { id: 'sand', color: 0xd9b77a, solid: false, world: 'print' },
+  { id: 'path', color: 0xc79a5b, solid: false, world: 'print' },
+  { id: 'bridge', color: 0x9a6a3a, solid: false, world: 'print' },
+  { id: 'pavement', color: 0xbdb8ad, solid: false, world: 'print' },
+  { id: 'concrete_wall', color: 0xa7a39a, solid: true, world: 'print' },
+  { id: 'rock', color: 0x8c8a86, solid: true, world: 'print' },
+  { id: 'roofs', color: 0x6a6d72, solid: true, world: 'print' },
+];
+
+// ---------------------------------------------------------------------------------------------
+// content/maps/border.tmj: the ground layer (gid = terrain index + 1, per content/tilesets/world.tsj)
+// and every prop object in file order (the plants' turn order depends on all of the map's palms).
+
+const BORDER_W = 33, BORDER_H = 17;
+const BORDER_PROPS = { world: 'mixed', tilt_ease_x: '9,14' };
+const BORDER_GROUND = [3,3,3,3,3,3,3,3,3,3,3,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,3,2,2,2,2,2,2,2,2,2,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,3,2,2,2,2,2,2,2,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,8,8,8,6,6,6,6,6,6,6,3,2,2,2,2,2,6,6,6,6,6,9,9,9,9,9,6,6,6,6,6,6,6,8,8,8,6,6,6,6,6,6,6,3,2,2,2,6,6,6,6,6,6,9,9,8,8,8,9,9,6,6,6,6,6,6,8,8,8,6,6,6,6,6,6,6,3,2,6,6,6,6,6,6,7,7,9,8,8,8,8,8,9,6,6,6,6,6,6,8,8,8,6,6,6,7,7,6,6,3,2,6,6,6,6,6,6,6,7,9,9,8,8,8,9,9,6,6,6,6,6,8,8,8,6,6,6,6,6,7,7,6,3,2,2,6,6,6,6,6,6,6,6,9,9,9,9,9,6,6,6,6,6,8,8,8,8,6,6,6,6,6,6,6,6,2,2,2,6,6,6,6,6,6,6,10,10,10,10,10,10,10,10,10,10,10,11,11,11,11,11,10,10,10,10,10,10,10,2,2,6,6,6,6,6,6,6,6,10,10,10,10,10,10,10,10,10,10,10,11,11,11,11,11,10,10,10,10,10,10,10,3,2,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,8,8,8,8,6,6,6,6,6,6,6,6,3,2,6,6,6,6,6,6,6,6,6,6,6,6,6,6,7,7,6,6,6,6,8,8,8,6,6,6,6,6,6,6,6,3,2,2,2,6,6,6,6,6,6,6,6,6,6,6,7,7,7,6,6,6,6,8,8,8,6,6,7,7,6,6,6,6,3,2,2,2,2,2,6,6,6,7,7,6,6,6,6,6,7,6,6,6,6,6,6,8,8,8,6,6,7,7,6,6,6,3,2,2,2,2,2,2,2,6,6,7,7,6,6,6,6,6,6,6,6,6,6,6,8,8,8,6,6,6,6,6,6,6,3,2,2,2,2,2,2,2,2,2,6,6,6,6,6,6,6,6,6,6,6,6,6,6,8,8,8,6,6,6,6,6,6,3,3,3,3,3,3,3,3,3,3,3,6,6,6,6,6,6,6,6,6,6,6,6,6,8,8,8,6,6,6,6,6,6];
+
+// [name, kind, x, y]
+const BORDER_PROP_OBJECTS = [
+  ['flower_w1', 'flower_white', 108.8, 179.2], ['flower_w2', 'flower_white', 76.8, 339.2], ['flower_w3', 'flower_white', 275.2, 467.2],
+  ['flower_y1', 'flower_yellow', 294.4, 195.2], ['flower_y2', 'flower_yellow', 332.8, 403.2], ['flower_y3', 'flower_yellow', 896, 147.2],
+  ['flower_y4', 'flower_yellow', 880, 342.4], ['flower_y5', 'flower_yellow', 144.0, 339.2],
+  ['palm_1', 'palm', 876.8, 108.8], ['palm_2', 'palm', 688.0, 496.0], ['palm_3', 'palm', 998.4000000000001, 179.2], ['palm_4', 'palm', 944, 460.8],
+  ['palm_5', 'palm', 880, 531.2], ['palm_6', 'palm', 304, 86.4], ['palm_7', 'palm', 1008.0, 403.2], ['palm_8', 'palm', 368.0, 524.8],
+  ['palm_9', 'palm', 528, 400], ['palm_10', 'palm', 624, 464], ['palm_11', 'palm', 560.0, 457.6], ['palm_12', 'palm', 579.2, 118.4],
+  ['palm_13', 'palm', 432.0, 492.8], ['palm_14', 'palm', 262.4, 150.4], ['palm_15', 'palm', 540.8, 89.6],
+  ['flower_y6', 'flower_yellow', 572.8, 342.4], ['flower_w4', 'flower_white', 588.8, 211.2], ['flower_y7', 'flower_yellow', 492.8, 492.8],
+  ['flower_w5', 'flower_white', 611.2, 83.2], ['flower_y8', 'flower_yellow', 643.2, 473.6],
+  ['tree_arrival_north', 'palm', 144.0, 240.0], ['tree_arrival_south', 'palm', 153.6, 384.0],
+  ['tree_west_north_1', 'palm', 204.8, 105.6], ['tree_west_north_2', 'palm', 227.2, 188.8], ['tree_west_north_3', 'palm', 230.4, 115.2],
+  ['tree_west_south_1', 'palm', 217.6, 435.2], ['tree_west_south_2', 'palm', 345.6, 483.2], ['tree_west_south_3', 'palm', 300.8, 432.0],
+  ['tree_pond_west', 'palm', 272.0, 214.4], ['tree_pond_east', 'palm', 569.6, 195.2],
+  ['tree_meadow_south_1', 'palm', 371.2, 419.2], ['tree_meadow_south_2', 'palm', 387.2, 508.8], ['tree_meadow_south_3', 'palm', 460.8, 441.6],
+  ['tree_river_north', 'palm', 649.6, 96.0], ['tree_east_north_1', 'palm', 947.2, 99.2], ['tree_east_north_2', 'palm', 963.2, 214.4],
+  ['tree_east_south_1', 'palm', 876.8, 432.0], ['tree_east_south_2', 'palm', 1008.0, 499.2],
+];
+
+function buildMap() {
+  if (BORDER_GROUND.length !== BORDER_W * BORDER_H) throw new Error('The border ground data has the wrong length: ' + BORDER_GROUND.length);
+  const terrain = new Uint8Array(BORDER_W * BORDER_H);
+  BORDER_GROUND.forEach((gid, i) => { if (gid !== 0) terrain[i] = gid - 1; });
+  const objects = BORDER_PROP_OBJECTS.map(([name, kind, x, y]) => ({ name, type: 'prop', x, y, w: 0, h: 0, point: true, props: { kind, solid: kind === 'palm' } }));
+  return { id: 'border', width: BORDER_W, height: BORDER_H, props: BORDER_PROPS, terrain, objects };
+}
+
+// The slice that is shown: tiles x 8-25, y 7-16.
+const SLICE = { x0: 8, x1: 25, y0: 7, y1: 16 };
+const inSlice = (x, y) => x >= SLICE.x0 && x <= SLICE.x1 && y >= SLICE.y0 && y <= SLICE.y1;
+
+// ---------------------------------------------------------------------------------------------
+// The look's parts that are on in the game (src/render/look.ts KEPT, no ?look= in the address).
+
+const LOOK = new Set(['neon', 'edges', 'water', 'plants', 'blend', 'cabinet', 'city', 'square', 'wreck', 'rifle', 'pictures', 'portraits', 'heads', 'mouths']);
+const PLANTS = { field: { wet: 'willow', dry: ['pine'] }, border: { wet: 'birch', dry: ['spruce', 'birch'] } };
+
+// ---------------------------------------------------------------------------------------------
+// src/ui/print.ts burstPoints (used by the water's glints)
+
+function burstPoints(cx, cy, r, n, inner, turn = 0) {
+  const pts = [];
+  for (let i = 0; i < n * 2; i++) {
+    const rr = i % 2 ? r * inner : r;
+    const a = (i / (n * 2)) * Math.PI * 2 + turn - Math.PI / 2;
+    pts.push(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+  }
+  return pts;
+}
+
+// ---------------------------------------------------------------------------------------------
+// src/world/terrainView.ts (the printed side, for the tile kinds of this slice)
+
+const ROUNDED = ['grass', 'grass_dark', 'water', 'sand', 'path', 'rock'];
+const ROUND = 11;
+
+function mergeSegments(segs) {
+  const byKey = new Map();
+  for (const s of segs) {
+    const horiz = s[1] === s[3];
+    const k = horiz ? `h${s[1]},${s[5]}` : `v${s[0]},${s[4]}`;
+    (byKey.get(k) ?? byKey.set(k, []).get(k)).push(s);
+  }
+  const out = [];
+  for (const [k, list] of byKey) {
+    const horiz = k.startsWith('h');
+    list.sort((a, b) => (horiz ? a[0] - b[0] : a[1] - b[1]));
+    let cur = [...list[0]];
+    for (let i = 1; i < list.length; i++) {
+      const s = list[i];
+      const touches = horiz ? s[0] === cur[2] : s[1] === cur[3];
+      if (touches) {
+        cur[2] = s[2];
+        cur[3] = s[3];
+      } else {
+        out.push(cur);
+        cur = [...s];
+      }
+    }
+    out.push(cur);
+  }
+  return out;
+}
+
+class TerrainView {
+  constructor(map) {
+    this.map = map;
+    this.arcade = new Container();
+    this.print = new Container();
+    this.ripples = new Graphics();
+    this.water = [];
+    this.tick = 0;
+    this.ripplesAt = 0;
+    this.rippleTiles = 0;
+    this.beyond = new Graphics();
+    this.past = false;
+    const p = new Graphics();
+    this.beyond.visible = false;
+    this.print.addChild(this.beyond, p, ...(LOOK.has('water') ? [this.ripples] : []));
+    this.drawPrint(p);
+    this.update(0);
+  }
+
+  update(t, view) {
+    if (!LOOK.has('neon') && !LOOK.has('water')) return;
+    if (this.tick++ % 3 && t > 0) return;
+    const at = motion.reduced ? 0 : t;
+    if (LOOK.has('water')) this.drawRipples(at, view);
+  }
+
+  drawRipples(t, view) {
+    const g = this.ripples;
+    this.ripplesAt = t;
+    g.clear();
+    const levels = [[], [], [], []];
+    const glints = [];
+    const tiles = this.water;
+    let drawn = 0;
+    for (const [x, y] of tiles) {
+      const X = x * TILE;
+      const Y = y * TILE;
+      if (view && (X + TILE < view[0] || Y + TILE < view[1] || X > view[2] || Y > view[3])) continue;
+      drawn++;
+      for (let k = 0; k < 2; k++) {
+        if (this.rnd(x, y, 1 + k * 7) > 0.5) continue;
+        const ph = this.rnd(x, y, 2 + k * 7) * Math.PI * 2;
+        const strength = 0.5 + 0.5 * Math.sin(t * 1.1 + ph);
+        const level = Math.min(3, Math.floor(strength * 4));
+        if (strength < 0.12) continue;
+        const wx = X + 6 + Math.sin(t * 0.8 + ph) * 4;
+        const wy = Y + 7 + this.rnd(x, y, 3 + k * 7) * 18 + Math.sin(t * 1.3 + ph) * 1.2;
+        levels[level].push([wx, wy]);
+      }
+      const gp = (t * 0.7 + this.rnd(x, y, 5) * 12) % 12;
+      if (gp < 0.6) glints.push(X + 6 + this.rnd(x, y, 6) * 20, Y + 6 + this.rnd(x, y, 8) * 20, Math.sin((gp / 0.6) * Math.PI));
+    }
+    levels.forEach((list, i) => {
+      if (!list.length) return;
+      for (const [wx, wy] of list) g.moveTo(wx, wy).quadraticCurveTo(wx + 5, wy - 3, wx + 10, wy).quadraticCurveTo(wx + 15, wy + 3, wx + 20, wy);
+      g.stroke({ width: 1.3, color: 0xdff3ff, alpha: (i + 1) / 4 });
+    });
+    for (let i = 0; i < glints.length; i += 3) g.poly(burstPoints(glints[i], glints[i + 1], 1 + glints[i + 2] * 3, 4, 0.3, 0)).fill(0xffffff);
+    this.rippleTiles = drawn;
+  }
+
+  tid(x, y) {
+    const m = this.map;
+    const cx = Math.max(0, Math.min(m.width - 1, x));
+    const cy = Math.max(0, Math.min(m.height - 1, y));
+    if (cx === x && cy === y) return TERRAINS[m.terrain[y * m.width + x]].id;
+    if (!this.past) return 'void';
+    const t = TERRAINS[m.terrain[cy * m.width + cx]];
+    return t.world === 'arcade' ? 'void' : t.id;
+  }
+
+  onMap(x, y) {
+    return x >= 0 && y >= 0 && x < this.map.width && y < this.map.height;
+  }
+
+  isArcade(x, y) {
+    const id = this.tid(x, y);
+    return TERRAINS.find((t) => t.id === id).world === 'arcade';
+  }
+
+  edges(inside, outside, beyond = 0) {
+    const m = this.map;
+    const segs = [];
+    for (let y = -beyond; y < m.height + beyond; y++) {
+      for (let x = -beyond; x < m.width + beyond; x++) {
+        if (!inside(x, y)) continue;
+        const X = x * TILE;
+        const Y = y * TILE;
+        if (outside(x, y - 1)) segs.push([X, Y, X + TILE, Y, 0, -1]);
+        if (outside(x, y + 1)) segs.push([X, Y + TILE, X + TILE, Y + TILE, 0, 1]);
+        if (outside(x - 1, y)) segs.push([X, Y, X, Y + TILE, -1, 0]);
+        if (outside(x + 1, y)) segs.push([X + TILE, Y, X + TILE, Y + TILE, 1, 0]);
+      }
+    }
+    return mergeSegments(segs);
+  }
+
+  plainColor(id) {
+    switch (id) {
+      case 'grass':
+      case 'rock':
+        return GRASS;
+      case 'grass_dark':
+        return GRASS_DARK;
+      case 'water':
+        return WATER;
+      case 'sand':
+        return SAND;
+      case 'path':
+        return PATH;
+      case 'bridge':
+        return WOOD;
+      case 'pavement':
+        return PAVEMENT;
+      case 'concrete_wall':
+        return WALL_FACE;
+      default:
+        return TERRAINS.find((t) => t.id === id).color;
+    }
+  }
+
+  rnd(x, y, k) {
+    const s = Math.sin(x * 127.1 + y * 311.7 + k * 74.7) * 43758.5453;
+    return s - Math.floor(s);
+  }
+
+  drawTile(g, x, y) {
+    const id = this.tid(x, y);
+    const X = x * TILE;
+    const Y = y * TILE;
+    const rnd = (a, b, k) => this.rnd(a, b, k);
+    switch (id) {
+      case 'grass':
+      case 'grass_dark': {
+        this.fillTile(g, x, y, id === 'grass' ? GRASS : GRASS_DARK);
+        let tufts = 0;
+        for (let k = 0; k < 3; k++) {
+          const tx = X + 4 + rnd(x, y, k) * 24;
+          const ty = Y + 6 + rnd(x, y, k + 9) * 22;
+          if (rnd(x, y, k + 3) < 0.55) {
+            g.moveTo(tx - 2, ty).lineTo(tx - 3, ty - 4).moveTo(tx, ty).lineTo(tx, ty - 5).moveTo(tx + 2, ty).lineTo(tx + 3, ty - 4);
+            tufts++;
+          }
+        }
+        if (tufts) g.stroke({ width: 1, color: id === 'grass' ? GRASS_DARK : 0x3f7a26 });
+        break;
+      }
+      case 'water':
+        this.fillTile(g, x, y, WATER);
+        // The moving water draws its own ripples, which move.
+        if (LOOK.has('water')) this.water.push([x, y]);
+        else if (rnd(x, y, 1) < 0.45) {
+          const wy = Y + 8 + rnd(x, y, 2) * 16;
+          g.moveTo(X + 6, wy).quadraticCurveTo(X + 11, wy - 3, X + 16, wy).quadraticCurveTo(X + 21, wy + 3, X + 26, wy).stroke({ width: 1.3, color: 0xdff3ff });
+        }
+        break;
+      case 'sand':
+        this.fillTile(g, x, y, SAND);
+        break;
+      case 'path':
+        this.fillTile(g, x, y, PATH);
+        for (let k = 0; k < 2; k++) g.circle(X + 5 + rnd(x, y, k) * 22, Y + 5 + rnd(x, y, k + 4) * 22, 1.2).fill(0x8a6a3a);
+        break;
+      case 'bridge':
+        g.rect(X, Y, TILE, TILE).fill(WOOD);
+        for (let k = 0; k < 4; k++) g.moveTo(X + k * 8, Y).lineTo(X + k * 8, Y + TILE).stroke({ width: 1, color: INK });
+        break;
+      default:
+        g.rect(X, Y, TILE, TILE).fill(TERRAINS.find((t) => t.id === id).color);
+    }
+  }
+
+  roundedCorner(x, y, dx, dy) {
+    const c = this.cornerGround(x, y, dx, dy);
+    return c ? this.groundColor(c.id, c.x, c.y) : null;
+  }
+
+  cornerGround(x, y, dx, dy) {
+    if (!LOOK.has('edges')) return null;
+    const a = this.tid(x, y);
+    const around = [this.tid(x + dx, y), this.tid(x, y + dy), this.tid(x + dx, y + dy)];
+    if (!ROUNDED.includes(a) || around.some((t) => t === a || !ROUNDED.includes(t))) return null;
+    const [n1, n2, d] = around;
+    if (n1 === n2 || n1 === d) return { id: n1, x: x + dx, y };
+    if (n2 === d) return { id: n2, x, y: y + dy };
+    return { id: d, x: x + dx, y: y + dy };
+  }
+
+  groundColor(id, x, y) {
+    return this.plainColor(id);
+  }
+
+  fillTile(g, x, y, color) {
+    const X = x * TILE;
+    const Y = y * TILE;
+    const under = TerrainView.CORNERS.map(([dx, dy]) => this.roundedCorner(x, y, dx, dy));
+    if (under.every((u) => u === null)) {
+      g.rect(X, Y, TILE, TILE).fill(color);
+      return;
+    }
+    const pts = [];
+    TerrainView.CORNERS.forEach(([dx, dy], i) => {
+      const [cx, cy] = [dx < 0 ? X : X + TILE, dy < 0 ? Y : Y + TILE];
+      const u = under[i];
+      if (u === null || u === undefined) {
+        pts.push(cx, cy);
+        return;
+      }
+      g.rect(dx < 0 ? X : X + TILE - ROUND, dy < 0 ? Y : Y + TILE - ROUND, ROUND, ROUND).fill(u);
+      const [ox, oy] = [cx - dx * ROUND, cy - dy * ROUND];
+      for (let s = 0; s <= 6; s++) {
+        const a = TerrainView.ARC_FROM[i] + (s / 6) * (Math.PI / 2);
+        pts.push(ox + Math.cos(a) * ROUND, oy + Math.sin(a) * ROUND);
+      }
+    });
+    g.poly(pts).fill(color);
+  }
+
+  // The shore ink, for the water tiles where `where` holds (the game passes all of them; here the slice).
+  outline(g, id, where) {
+    const m = this.map;
+    const arcs = new Set();
+    let any = false;
+    for (let y = 0; y < m.height; y++) {
+      for (let x = 0; x < m.width; x++) {
+        if (!where(x, y) || this.tid(x, y) !== id) continue;
+        for (const [sx, sy] of [[0, -1], [1, 0], [0, 1], [-1, 0]]) {
+          const nid = this.tid(x + sx, y + sy);
+          if (nid === id || nid === 'void') continue;
+          const ends = (sx === 0 ? [[-1, sy], [1, sy]] : [[sx, -1], [sx, 1]]).map(([dx, dy]) => {
+            const [ndx, ndy] = [sx === 0 ? dx : -dx, sy === 0 ? dy : -dy];
+            const mine = this.cornerGround(x, y, dx, dy) !== null;
+            const theirs = (this.cornerGround(x + sx, y + sy, ndx, ndy) || {}).id === id;
+            if (mine) arcs.add(`${x},${y},${dx},${dy}`);
+            if (theirs) arcs.add(`${x + sx},${y + sy},${ndx},${ndy}`);
+            return { vx: (x + (dx > 0 ? 1 : 0)) * TILE, vy: (y + (dy > 0 ? 1 : 0)) * TILE, cut: mine || theirs ? ROUND : 0 };
+          });
+          const [a, b] = ends;
+          const ux = Math.sign(b.vx - a.vx);
+          const uy = Math.sign(b.vy - a.vy);
+          g.moveTo(a.vx + ux * a.cut, a.vy + uy * a.cut).lineTo(b.vx - ux * b.cut, b.vy - uy * b.cut);
+          any = true;
+        }
+      }
+    }
+    for (const key of arcs) {
+      const [x, y, dx, dy] = key.split(',').map(Number);
+      const i = TerrainView.CORNERS.findIndex(([cx, cy]) => cx === dx && cy === dy);
+      const [ox, oy] = [(x + (dx > 0 ? 1 : 0)) * TILE - dx * ROUND, (y + (dy > 0 ? 1 : 0)) * TILE - dy * ROUND];
+      const a0 = TerrainView.ARC_FROM[i];
+      g.moveTo(ox + Math.cos(a0) * ROUND, oy + Math.sin(a0) * ROUND).arc(ox, oy, ROUND, a0, a0 + Math.PI / 2);
+      any = true;
+    }
+    if (any) g.stroke({ width: 2, color: INK, cap: 'round' });
+  }
+
+  // Where the printed world meets the arcade's floor, the grid runs on into the grass (only the slice's part is drawn).
+  drawBlend(g) {
+    const m = this.map;
+    const near = new Map();
+    let ring = [];
+    for (let y = 0; y < m.height; y++) {
+      for (let x = 0; x < m.width; x++) {
+        if (this.isArcade(x, y)) continue;
+        if ([[0, 1], [0, -1], [1, 0], [-1, 0]].some(([dx, dy]) => this.tid(x + dx, y + dy) === 'arcade_floor')) {
+          near.set(y * m.width + x, 1);
+          ring.push([x, y]);
+        }
+      }
+    }
+    for (let d = 2; d <= 4; d++) {
+      const next = [];
+      for (const [x, y] of ring) {
+        for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
+          const [nx, ny] = [x + dx, y + dy];
+          if (!this.onMap(nx, ny) || this.isArcade(nx, ny) || near.has(ny * m.width + nx)) continue;
+          near.set(ny * m.width + nx, d);
+          next.push([nx, ny]);
+        }
+      }
+      ring = next;
+    }
+    const inks = [0x22b8e8, 0xf2267f, 0xffd23f];
+    for (let d = 1; d <= 4; d++) {
+      let any = false;
+      for (const [k, dd] of near) {
+        if (dd !== d) continue;
+        const [x, y] = [k % m.width, Math.floor(k / m.width)];
+        if (!inSlice(x, y)) continue;
+        if (this.tid(x, y) === 'water') continue;
+        const [X, Y] = [x * TILE, y * TILE];
+        g.moveTo(X, Y).lineTo(X + TILE, Y).moveTo(X, Y).lineTo(X, Y + TILE);
+        any = true;
+      }
+      if (any) g.stroke({ width: 1, color: 0x22b8e8, alpha: 0.55 * (1 - (d - 1) / 4) });
+    }
+    for (const [k, d] of near) {
+      const [x, y] = [k % m.width, Math.floor(k / m.width)];
+      if (!inSlice(x, y)) continue;
+      if (this.tid(x, y) === 'water' || this.rnd(x, y, 90) > 0.55 - d * 0.12) continue;
+      const [sx, sy] = [x * TILE + 4 + this.rnd(x, y, 91) * 24, y * TILE + 4 + this.rnd(x, y, 92) * 24];
+      g.rect(sx - 1.5, sy - 1.5, 3, 3).fill(inks[Math.floor(this.rnd(x, y, 93) * 3)]);
+    }
+  }
+
+  drawPrint(g) {
+    for (let y = SLICE.y0; y <= SLICE.y1; y++) {
+      for (let x = SLICE.x0; x <= SLICE.x1; x++) {
+        if (!this.isArcade(x, y)) this.drawTile(g, x, y);
+      }
+    }
+    if (LOOK.has('blend')) this.drawBlend(g);
+    // Ink lines along shores.
+    this.outline(g, 'water', inSlice);
+    // The torn edge where the printed world meets the arcade.
+    const tear = this.edges(
+      (x, y) => inSlice(x, y) && !this.isArcade(x, y),
+      (x, y) => this.isArcade(x, y) && this.tid(x, y) !== 'void',
+    );
+    if (tear.length) {
+      for (const [x0, y0, x1, y1] of tear) g.moveTo(x0, y0).lineTo(x1, y1);
+      g.stroke({ width: 3, color: PAPER, cap: 'square' });
+      for (const [x0, y0, x1, y1, nx, ny] of tear) g.moveTo(x0 + nx * -2, y0 + ny * -2).lineTo(x1 + nx * -2, y1 + ny * -2);
+      g.stroke({ width: 1.5, color: INK, cap: 'square' });
+    }
+  }
+}
+TerrainView.CORNERS = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
+TerrainView.ARC_FROM = [Math.PI, Math.PI * 1.5, 0, Math.PI * 0.5];
+
+// ---------------------------------------------------------------------------------------------
+// src/art/props.ts (the entries this slice uses)
+
+function flat(poly) {
+  const out = [];
+  for (const [x, y] of poly) out.push(x, y);
+  return out;
+}
+const ink = (w = 1.4) => ({ width: w, color: INK, join: 'round' });
+
+function flower(color) {
+  return (g, t) => {
+    const s = Math.sin(t * 2) * 0.6;
+    g.moveTo(0, 0).lineTo(s, -7).stroke({ width: 1.2, color: 0x2e7d32 });
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      g.circle(s + Math.cos(a) * 2.6, -9 + Math.sin(a) * 2.6, 2.2).fill(color).stroke(ink(0.7));
+    }
+    g.circle(s, -9, 1.6).fill(0xffc400);
+  };
+}
+
+function spruce(g) {
+  g.rect(-2.5, -9, 5, 9).fill(0x6b4a2a).stroke(ink(1));
+  for (let k = 0; k < 4; k++) {
+    const y = -7 - k * 11;
+    const hw = 15 - k * 3.3;
+    g.poly(flat([[-hw, y], [-hw * 0.35, y - 6], [0, y - 20], [hw * 0.35, y - 6], [hw, y]])).fill(0x2e5e3a).stroke(ink(1.1));
+  }
+}
+
+function birch(g, t) {
+  const sway = Math.sin(t * 1.4) * 0.8;
+  g.poly(flat([[-2.6, 0], [-1.8, -42], [1.8, -42], [2.6, 0]])).fill(0xf2efe6).stroke(ink(1.1));
+  for (const [y, w] of [[-8, 2], [-15, 1.4], [-23, 2.2], [-31, 1.2], [-37, 1.8]]) g.moveTo(-1.8, y).lineTo(-1.8 + w, y - 0.6).stroke({ width: 1.3, color: INK });
+  for (const [x, y, r] of [[-8, -42, 10], [7, -47, 11], [-1, -56, 9]]) g.circle(x + sway, y, r).fill(0xa3cc5e).stroke(ink(1.1));
+}
+
+const PROPS = {
+  flower_white: { foot: [0, 0], height: 14, motion: 'sway', animate: true, draw: flower(0xffffff) },
+  flower_yellow: { foot: [0, 0], height: 14, motion: 'sway', animate: true, draw: flower(0xffd23f) },
+  spruce: { foot: [5, 6], height: 76, drawn: 60, draw: spruce },
+  birch: { foot: [4, 6], height: 74, drawn: 65, motion: 'sway', animate: true, draw: birch },
+};
+
+// ---------------------------------------------------------------------------------------------
+// src/art/images.ts (the slots this page needs). The owner's assistant replaces the two placeholders with data URIs.
+
+const ART_URLS = { 'props/birch': 'data:image/webp;base64,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', 'props/spruce': 'data:image/webp;base64,UklGRowsAABXRUJQVlA4WAoAAAAwAAAAjgAAPwEASUNDUMgBAAAAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADZBTFBIGgoAAAGwRW2TIuFJxd09qbhn495x9wQt3N2hcGdwb9zdoXB3h8b1Z5F4Uri7w3exs7Mz092DXkTEBNC/ptrwpAiOe06KCLxuSnACEk8IAQCZEDo1bEGnhk2H4BNDsJh4Mjy5BTIZbGJwaotTQdBuU0Gnhi3xMDEg0yD4sttPA8Hy506DV3awaWAdPEyB4B0gU0DRNU4ATp0S1+9G6H7n+j1jhVdWL/gKHmoXsepjKxd8pcR1i1hdq3b8tT0krpmiT60Yp14S10vR772rFbynz3CtIvrWSon3lrhKnNC/VqnBgG9eq0Kz+RC4X4UiBv0YV0d8GGhtxDGwh7rIHIDHNACMaxIcQBIeBFqVr73flEnQ99WfBpC4IrTvZkREbH0Zq/lPTq3JUu3rg1sQhVM3qA+nvn5zB6pzRO+JqyTeH2KNTnMM6FIfficG9Qtqw4aBP8yVeRgGN64JNz4cXrZDPdgwxt8+n2vBhpEaV+IWGG1Tidl8NLhbFYJhvB/g8rE6xmxcOjaMPEnZJGH0fvvNy8XRkeFvXsqlCoZMLRSJH+zI1pWLs+5NE7I2Lkx42w/R7pl4KM01/1i40lQBJL3Vm0eQmm8DSKJmFgOV9rgb3OuRIkcTsYgw0Tm/HiZFh9HBaqZUyc3OsWH4BvcOVFdOg+CpVFs2DOtSma1fhKETV4Wf9cvBYFyRE9+CMWo9xDFKb7gSsznG2tRB5hhvUwFWx4hduXRrPQMjNy7dfc3HBQtlI5KxweMRRRPH+C9TLhY/3ZFlCoU63JCnRy6TXIosv6KBiszqyNS4SMGQb5LysDpy9hgKc877kbsrl4PVHAW0UIiNb51QSI+hBOGFv0A53ZQz4+gobFLOSlHgpJxR+EKBAM2IDmveA3zvCU3TNB8pxnyWU9cGuV/6+ObzwGcboTKKZ/f+zegIkUOpkNd3LHpaSJ7Bc+T0jaikTwWA78bA8pQoOhpfA/iTXusAIhWWoz3/VodSqzjGms6O77JAQe3NNypNZ3GM97Xbb0ita61VLnGM+C93p+KLY9QuhVvvZo6RuxSNn/NjjN6lYMGQo0upWB15XnpmmU56K7L99jkF4ujI+LtSIjPPBy7FIaJb5ASX4rA6svbIZQmG7JMUZKaOAnrctRTycRTyzacVQeYo6HyW21onREdRk3JOrG/+PoprIZugCUX2GHIIao5i+4tuy+MKao7CJ+WxHHDrZ5ijhumxYRxPQT09HjSGc66tB/CoMdDxjX3sT/iGmXnpkvIoiGjbi2V/Ojou8VSapGr2/FsJ06jlSrT+4ZVipYExjV8diyleuPVDUVB/z9efdwuRHCLw8/dEYVZzwKN6Nim1JAcwv+vG+1GmLHLGxkQUkSxKIDL8Bsk8AwtqCdBgAC4VypwtMrUGOVeYUwYwJhYJxBLNNDdi6syGLO1wKjQbMr1UyrTJi5CtK5foxB/kAzQFOvdyZD2flWb/DyDzJGU56+PI3mMoiDhK6KZcCHGUMikX4KxnOor519cVQBxldBWR6+5IuXN0lPJjF1MBg6Gg3oTcWB1l9ZfcnnMKhgIn5VxYHWVOGnJgTSi3xyNGpwkFd7O7ji7EhB+VypWyZHl2qeDKOYToxQLefMLoODqK7nH3UbEmFP8LyuOZGar47G1GcpqhlvPTRrDxGXGOes7vuc9ArO/5Oar6168qDxA0ofPbvlQBAEm5p7Vv6eicVL0OQAo9PRMdPQqLo+xuZgnAD98WuR9iW5JiIBJHUS1++HcL3uUWGxCLyEnrUu+sZmYqTMTRAXgqR+KtzlezGDQtwU/uRiPmaGYagtmLHu5FcKGlrOYtSDyizsGsSfnBZQkRBbVrgSSUb4ieHVw6ENHxIkxZx/zg0il7TgWASzlOehuK6E0oAzeOUrpyAY41lNRCbqxXo6z+aM7qIEN5k3I2rN9CkdMjQyYNij2XHGaGotvogqHoScYmjnKbiDCNXZ/wpXJ5DDR+Vi8X4PF6O40sGAr/t08rj4ijo4IphpGwJlTSTXm4mSbUND04DBPiHLX1KNxbiI4qp8eetkEPLNFR7Z++U8MKB2pC5d2ihLbtrxPXYBLaAusn/oJp+NkbELEmdP/zXytj0da0XGbKRPQ4dE/6kCsr4/H6Z8riEdR6WPRlKQrLHNX9+6eFuof40T/ix2+PwkTiKL+nVQAP3YhYm1tuSEQ0m6OCczEANu8CWWX5bI6yf3m+ACOSB+5J0hiAeTOj3td/Nhb92wtuDi/Na8PDzZHuQktZRAINuP5zATcNB6unGEhikNuuKcqlhxMFYRoviwRaDEztZ/+qKK/alrLnR5pZ9FK45Lc4MxTTI+fHD5mjpOkm62QWDIX94bNCVuIor8eQDaujyB6FswiGcqcoPDZWR9nTE7cf1QlvQcmTmb3qxpuOKERH2ZRpzCE6ip/uss1oQnTU8A+vDKMIjTlq6VF4KI6OuqaHnLnxICGhur94j+lJ6/ZGs2ZxXpPFd6zf3+Jsjlpa0zTPeW8zo2EloZqp2Ys225sGZTVHTb8cAw3JmlBdf+kddu9ru7sl1PkLUbgHltf8GfVOr707dwuaUPsUhdt2un50lHfuLeajATwQ0XqnPOjTf0een1kzTCPeot4lebcv2LyTx0BEtNeX0Tk9773jsXPSIDYjuRoATKyDiWhUXyYzNW/7lgm1BkttyUxF4rwfUzNLK7zvQAEsrZJsWSSi63waAJRf/7clMCaiYG1wEwrSehB1ZGllIgqO1hS9mzERUezi9lAm8fuzrWIck7ekGRFxtLde+s5dd7rXB3/bBmMiYv3sPxcAV6ZBT3HALQoL8INlc2VaZS5ERBzo8EtXIuIgBgDGtLjO4XsT0RbnaWqBMRHRLjeMaeGn7wzDUBAJREQscv+2pDNq5ztZi+uMll73rz0QEUcH8JitFjpyNAcA251aWUTktA1ovPqHH37AojB1DL5ggTru/oV+iK73esfvzl+BiMKTLWq6f9v4+cKTNqfubACSMnXd+D19EQURXq2VOZcez/y8RWHqPkQNN96NerSa9ftvlvmscuKrwLhm697UsbrtXi9+1g/R5xekVsHQsyvXiNXRpycAMK4PGwB8XtMqxo/5NgDj2kgC4HE3spWIDo4OGFeFGwc8BqJeiMLzfor714QNuCwGWuyHNjhNdq9JsEaOoNYjLuun4oKJ87ldJ8Z3D50YkP9Zu+fUeMHUeOFqT6ncG1ezfy/Y/wt6ydS4+9SQ/2G549S4x2qJ6/aS1SB1s//06NSwqu37tYkhmD4eavbUPiA1s15uNTWeX7GjrujFKiaYQvNZvW7cD6Rej+pJ62U92b8LjrumpzUH1krQt9Qq9qaVCt6bVUoxLTj156FKigGNKxR8CMT6sGFQl+pEDOxSGfGh4FIXQ2uKkjokU4nmbUizqoSn2svvJMJE1uIWhWkxyKPNAbhUpWsE3DRQ9yAigSrNT79PoH9hAVZQOCB8IAAAMHAAnQEqjwBAAT5RJI5FI6IhFIt1dDgFBLK3cGAAMyK411/aTtJRi8y+IEfSza/BfE9Fu3s55v1Ff6Hfqt6lwCv+hfh3+xvyr7g/sH5Gftt6w+HL07+0/uT/gfcnxn9SOab7l/uv7l6A96PxS1CPyD+af53+6etZ85/xu38tr/0vUI9y/tH+w/v35Oelrqg9+f+77gP84/r3/G9cf+X4Jn4D/Zfrb8AX9G/uf/Z/y35Y/Tj/X/+r/V/mv7a/pj/wf6D4Bv5b/WP+X/dfym+dP/6+479y/Yz/Xr/2s/IPYALoO8dWtQdvzQCjYV7CAsthmIeoHYl61OHOZL9V8nCp3B3cOfRdX76G8QjRBT0RgvkjbLT0Ftyvv3tUYAKp2HDgAm7cjtydApQz1ulOrZVGMex3rmyrq360K6ONrd6G3Tu4jUZElZZtAJjpsKzG8lXeRx8W69V/fIiJUN1LjH7d75SbGgkQPQerfecxyQzfa1tdsaIk7OZnbv49/uZgDLQVDiqiPPSt+Hk/No0W9rD6lVr1l5mxUO8iKSwbZ+bs70M/hJjANgtARfqeb1nlHPaEXcP/gi5E5Q/37ak5d0SDHJga3n2J/+J8t5tg/zHD+QL/pFgdKtM2NMFvS3Hiua6no6yRgl8/HjeFo2TQvpD6sVkbk9vDxaiwRuUePVA1OoTFzLevUx9nEpPcik+ma3ry19uVtzTtXLsAnzPHugAGYgkIFWuHgUYfzuU6iFbMQ+N29awxsCgycSwbIw8JyBfOhbKgO04rK+9hbKbOaZMH8Bu1Avv5RQT5Yp1tDHVToTXOVEVlu9LzhcfNRTGZOz0b2uqkB9bYSEBYLVcQ7jNgg2NKVMDe1UYVkqTpvSzND/rxeI+txEJ+MWl27bYnBumG8UIPO8BHNNEmvLmtXN+D/5nhmOlaB36zJTSAP6IDuuP4Sxv11ncwXV69hdggjsqjfmKneeC4ooVNVk9LlTTYD84Y1ij8f0SmAePq/9TzieU4mBhKvqhkFYYD/GM6c/yX7ii/oe/4CI5SpKiiMcdK4xrGU3VZkylTSo4q8eUqyJxX+0Qerjw3tb+UZIJeDNYODDORwr+3yloS+epbytGs7vRIXuIagTLTrEjDHrRg+BL/zx9sEuGRx3Lql7PDLjUAJna4X++tagB2fg+MC39NkbIIu8ic7VdSEKb2K2nEe88CqYH0tRiaAYoAAP7uemK6QEp968wboZn0l7g4S+w+D4HqdY4FvAi+zquDosgFMgy6uYXTaCT+B7RmM1cxg5whilfdjezGx9ygRED812FMMojc6u4Mn70gQsf13jhSETt3rCK70Bfjg2X8obqGzdgQAG9vmDyWi46Ogz8UXqu2LVr8VAbVni1yf7M6KXdnMatiSAZ5XiTqPiN6s9ik4vDywWjjJRufENi0ptdsV+6FQ8mim0geDO/BDCUUrRM61+BmCJJk0N6LfzosP1VO8gCcCrOxvUWkS60RH5HBdWWNZJ7koAAAnOQ9yYr/oqEnjucsUzbaMpVb+hv5z6sb3Z+I1y422REhc3femvAvLfFfYDI6n+j2AenQZS+wOjbUUV0FN88jOqnN+kcE5QCtf81FRKodeEU7AGYdEk8iEdd6LUniur3tCRTc0O5Fs+xfM7FY7iq8qJ/4+egrey+cr5byXNAohpbLOY/lFg2kbuau41n80mWjj4KQn0EnrUwkrh4EKflOav0ho3ubPb3nGMoiitD627dVwCtsisT9EO9+rVqHxEP9PdVZ3RDrRk8/2/VzLl3Jvu9G5N+801me14LxQuzovP1yr8xQkY4gSjxSg5bYrYo7Co6OTpT/2/jxEmkR2Iu9n/gu+1KPfpjzgMYuz6JQ3OLq2IzPJod2g27XCuRH6Hqy+Hk5SioyR2sBIlzMDDHVrcqQf9ozsjUhCO6pPsFA7XwcUwx4zijSZaSzB4P6eckQR2BISMx2HKk4Q0jTEY4XdjwG23Wv0w5/PUskMRxHyKheHq9EeSzYtIAzNFUJlDnr3WbOm6XEAr9NppYSLje637DGZiq5uBU1ZWVj73h74vbHFoRX1RML3ahl1VSy2qfWIzeWiYqU9cvuVf48HReNuDh3AeG2qEG0QF+MSkXsbQ6/kgoIKaAWIGwrHaY/rW1C9VWvXcH+PR0gOe0o/wJHmSV/SW0DwbaP+MxO4dvTthluB7znKh/Iz570XscGIjX+QJNBiKDs7AMvMaLwtwil9p6zm0gWAfSXCNARZvhseZxFuC2uX/zLKZuTSaZ2YzXmFSaaNTjhwhZ4ZVEA/44RMUQzP+kAzdM5ib+TT3/VDfxnOiyrdybxWKnjWJq1bh8hOR7W7hisattxbnmcjz5VTOGXAa13ijaCHaQa8GAGQ8jbyx10CiNQyoQWO9oQD8IC0+QhnCF4lEVR+v8yyuyaTCRE/Frbl8yR7I7Sopd0s31NI2/Yv+0dyGqpCLWiJjbl5YHZidluvQPKZpk/i9++3WeGstk28grwnVnysdO3q2v5cEwrLPMqm6cYNaIwoISthtS5h5E5R46XhrYj4uTglDlBQJK49P29e8TFa4ys+4UqR3D6voFyZfPakefhhwEJ8Olr5UjELnatljO6dFj2qzL4xR457CvwXnigelnbsyvG6rVvr4pDcL5n3dn1Y57etfCfJg+K1tACO4sqEfU0M3B99DKbQmTLstMLtUTtxfMuRnpjcyyyibS+cQlKfAG/lZiUkhQi6MmYJGcpL5tjomVOGu3x+IY1raHLR5VlPirbxwv00nn5L7GLDUo34NInwAo+TCtXwyliHIUsdrFb3ySI3EGRqsLOilJZTmgONters3oeKwdC03TEaPcEN5u9oeZMrewaz4IpoGz0NGLQafYh7vVtW90m/9OSChSrBVjUsq5tH9NS1tog9Z7lZs+IGhmq1pLHP8gkanTU8o9rTcOlko5BfmHA6Sv9F5WvU3J2WZFGvkuxqfy+X41hGh/1UY+LZNi3gMUOMd3mnOHryyHFjc1+efo+9TDIhMpHcjOfS61SLWucYoMfWJHl1/HoW/V8u85LhDfJx8PXj5BvaOewcLmJAwRqOjoSLvodvB0O+GzNmldLMSf4VN3UBzQge7kP2kmDGnEoVZgoubewz/TbO4/BSbdDCvwfRFjjD/ztYwJQp24VZx6372E+bR41w/nz9xonedIS16zM7NCZdMWjHAih4jfZfrUp4toT76ZTFk1sPxqb2MWpbRTchrHLgGabn8wMe5/ElZVE1fK/gjhLl23V1Xf22hT1Djr8OgVAoj6pPGxfrPmVisolz7AQXbaYhr2DNYcpXtN+8cza5+Tkh6dbnu+Gs7ys17xXGaBTv5ST6VhsVthMpB/nQSSp0NNsB6IzvljbUWyeAMnvJgkCAbktamAqKQBzmNiNKyAi+qdpGx6b4CUTj5LWVRUohJzoj0ftnBzG5xq2Hqf0siIuWo/FvV4pNR/22TDl4CBE57vcGbjl0rlvcZvIVJnGLpraHjRjb+yChQK+SzR6TY2QTCooYDbJhVTQxHGQoA/9dU8ncr3xM5UaaXyx4RcNbKk42CQPTqXAlXlQTdrkaoPQN1ydfHi4jdbZ1U5qtD6Ga0K9W9I7orR+u9ZByqEyNo0KRFTT4KC4dh+9G/jIo4zcT/dyOVv5+F/cdN0LbLXEBC3/XDWwSBxVOt2cmlsEhMT//9cP//rdP//1l15mxiH3JutaxWH/Bb2GVgK7CnFwVLl/s9NdJxTgECbqI7dKmxD1mDVSl9tILyuZK/BvSclX0qamMnTkQVvRQDGIB8Nu5ESccHC36VXiR87Ocm9UHd6FdGjP1RtAvQd1u3ZBne+1j/vyioNxZIVJ/hwt9gMzD9ppPRGFz+VaQCwBzf1otkctKcLCUUXwZX51mbxKHz4w4sf/1kjcLa6xwc0pJLG2vXdwpqm+Hs6TAUcv9/V8dTCJg1br2hJV4GZB86FrFs7xGvF0y6+EDZn0YAQ7DBkRyVmCgmelTGzYvaTD3Mf8//f8KHuLDLuF2F7bfh+aiNJY2FpgqpqHCTSmm+gyT9PK/EMfhze7qyfj2RmyZkXq4hE1H3h+glB3AEdcxawS/dJdy8iULAMEQyfRt1zCg05O2YzIiid80VOxTJXZ9LYS0d45NgpT05ONZ30x6xS+WJcNcjmP0cJtvwfLu5GIF6uyoyPO9hDtrVxjSdTjkSHRDw4fIml90ZNQVu5g4ZBl/ugqbxa8BoTxmst/5NpiVGccMj67GC1YTr+TDHAqk/OPoZFyX3nSro5t2Vf3aa6IsVHqLtUBpCi17RRHTwyjCzewVxVWR3RxB+Rx6WRkH/ZAusrqK4y9rmNXabsvfM2u30lLv4B0oVrF3So5eEmYrgJwDOL5APwwy0tg4LX8Kb+CIqNx5WQbJBuamRKbiMP8yUQK/cSVeoOQALQCdilff6U/1ICQ62ZOxBH7zYFDQ4ZB9Tec7K5P8CYbgDVYdWgSgHsJ5axDb8FEh14zCTsbq/YVA4C3LBr6dzyr2UW4wVh7rLQ9OvMDag8k0WetiDJxZP2Hh9bICQAwDqWhuFIeD0JF834m1NvnS24scy29woo3rEXIP/X0f2UmJNvmAlQd60ks/DhLXsRtgflsMifqVMb2JpPbv8NlGW7dA8McTQa7D8nrQ9kEf1LTv9JNRPSN4S6Gi/D0aKIiPpF+DO5scoIMIwrQ12GE3bu6jAw3xRuf/UYeC45ciPUXnMm40YBCcSc3eGgXLkcPpg1ebu8+ABUy5nxay/M8bOCp43MakAkA/cQqZsRALIO7eA+MJHhXC+whbVgMaMRMNhJL8IJgHe8Hah1z+lY8Q2pr5KjdUOXyawaZ1SAJEbf93NH0mOe9XFXLN4RXTRPuAkLTkNvXojTc7wuqk3nE3sliopItIUaPXVcY9NtBGdaTLh9YTrVQByo+qXB6Nyo5AcV1AApQmq9BIujLZSSNiSvvHmUwpFqc3BqT4KU5HcP7WVkK42t1Urxba5Ghfn3uy/cOfzdLBEPmo3lA2EeCklMcq8AvZLPbsgvjpDOaIfMEBIaKK/i50FsLbJM8JlKNQyXE5+bwpMd52f+8iLSTd5oiFvcHGWkepR3btPh/zpQryyz8D0zxPV/52wIzYYN9snSowbDsG8Isbh4FTfxpLl/0oDAhYx+m8FUf1daJzCtVhAyqABSsyvPtzgciQjpIcpElwcPXuyaPBiOFUe3d3Jnw9I7R1oXN/75dorq1go4UkZmYnZJYpochlU4B3AM57iQ5iNSCQZ32PyxbLY+29BJjtQkkJkjvgLH3YqF9AFDEK2B0lxW7NW1FnC13+ZJJuF6LhR3Axy6xaPQG/B1i1ROqVYxlaxzqPG2Nl9FSvaluIRjF03vxG91PihzKZ0lKk/Yf2K4ekEAPeMg6ntj0tg3iBXYJzbkGjvTjSBO43EsgO7yHiFLJA9KKQnB2CZu3D9aAbT8hpuDdFmVkZMHt7QJKaYT44QVFgifvajlgNx3G0o+dqC32os+aqRpsCCkvZP5zc8Ofi71PFSkpUd5wuoWbH2ow5nlxafbMBDbMX1QqMR0R/Gejippck5MjBQwKpm1QVwKImEMGd2q3XVDwMfPunV5r/nwG9EKMF44s4V1gIzHDe9lH50B3zOX9Ffo3QRAFVjAC8OAu7XWmuT8pkfhYDuuBJURLS18242CMLE/EibfJrG1uG1u26aM1ovmQI9EZReCN0C+PiGn/qhh4jC/cgU9DrRzHzQXmhJ5XwZBDix0/j8i8lIceQZFM6/JKh+P7IsavzrqwW4Y8ic1V02dhpHSJTHmBCj4i1ZlfE5xF9OLMLT3MRbO84TiUerMQ4jz3BT1XEHWYrcrHEOTbuMQlUC/9/YhFJN3fj5+JMF3fV1qjHmrxor16If1TdVdMNjDvuVdKXZXF3SOAK3q/rdHzwBfnMO/cd3na4qOO1S/+HNlhZLhM1OG6APKmTZloWWsQ6uDx0HvUH/Ix9ezBP0OpBNuYm3H3EavBuzJHbApr1D1Vac9Dz1ZhzEMVv+3x3QIQNWaGok8F1PgXzzBnace/nQviRJQ4Px3zHagLvWnHz4ddmsTB3++KeffzgX5/6hTHkC72KTwXNImrK5o9i4ci/NTtb6Z4uGp758x5DXGSl4fFPR2yWmgMIsqXiNjFETKvcAqyF8mClomcvgUSfXEtYXQP4AzHkAkxRV3qOyn5E72Xgm/OYkmu2wbRfTVUKsJ9sUmdExyzJTKpaD6fRfKnqoXbIQkVuV2oJARE4NVsMmg5FnLi7Ou3zpOVA/xsS6TRhSsPX54wVmOHDh7DOWU3k/gxUx9lajriLDz+HphGLebQ97XlU1aGrjE9PFvB4ZYh4kfnBX4lW2YgzggSyYnhc+gUPLrGg0dEPcNC5jCkNmmeNcGzQrUTHg1js7bYHadSZMCvwKTUhLddpIR5ov4ou36SW86/Q/y3DHCWem9XZNWAWWo5U+fqV8kPLPHt7RpkX1RB1DQ6JkWvF5u64/N5Q759rmU5blro/JB7rGE/hYU5O8FQ/4bSmzn1NjmJyWvOoOnfAMBbPKkCmzgVzjEWFCW5LeKGX8JhzRmoHCZjcbzQYAxAMcEAY8Gla6z94+nAZLhE095vRvmzbEGr/GJ+S1ua4QKZSUua9RyJPYjTiXf5YReJGugEfW0OuNg3X06TM5m9LVDjqc39IHpadr+D3j+xjJGnXpeB/6uXniDKJwO7/xYAdeTBef4291LFAwvjAPeLl6cDCZqZadLo+xc0VZT7OBrFulWoBPoTS8l/MeP1qO06RwYOPmP/XAihR/IPFx1BibVt0zDQ1nYthTQMsQ6mlW6+GFeiWpdqKKKyWKJboDTDogNrSvGppejgbSEjrGW9/ZPBijogMNYtr50KXHHL4I44zViFIuKwXVZMgbxcWgkq3iuCfpWJbIFZ+jjxR5RPkoTPrfqK7NSiKSpCutrovZF4AjDSiKkP/BA6z+VC/+r8c+0Q8JQnNEaij6TvAQl0O0t1Mt1FryjW/EIKXIlQ977vpbjey7eLNnutr4MR1mhgECZyZyiPjqfkU3/VFLBwQHjabqve7hTBwrErSTblknPXlhrCW2+VwGgfoU0oE5JDpTdKyB56zRgL1f3/Q5qPQaPwQz2rzyVkxqMP9/xhD65ckdMGJlg+85u/bVocmgIwidDFT2nO6EgJNG8bzLEdI0nXxJUc/ELNsgN0lqhDUHYpiaLbyviinQ080bYggiCLSYeSanGPrJ/OyUE4Eu4L+OpOprUjg006LfysPoc2aA8QKyhModO7q5qnMIf0XhTzn8zwOHm0fDJ5RligFh7dR0CMQe84E6vbMf9JnPfpVahzUU3jh/Ox5aKSHCtKUCGz3DJeWQzMbu8JdF9kaiNeHr7WfQPIFan8XIBdb2pawnwVrirQIh06aWoSfDQx9ex2xbr5hUKx9PoK8UGwfyFvg6Ldf5VEM/G7aU2+x4nwx16c8w4qWIAcEwjOnvhXVb+rsFx84BKjRpIuC4PwvpPcLva4vjYfEb2Yj2Vb/DFpeHJcWl2q82I6RWa6/Tx4Jflfj7tLsA0SlepPlQtoutQuxC4X+lgi0poy3yPa+BTdY2ySYWs1fj6jSIy6MXigVyIMUbliJ77Xsiz+k34N4BKuts7sch8S0MOl44i+58dR/x0yC5LgyXdE/Q/P87B9bFUXrAUGDsUXhcqsOXbMWKR13u0qDb+MKfTyLzCD2UMs/rsvb4sWthvoainMm6QduomPXW8F+y52fimzzT58iawNOnMEvQk6ZyGntbQGi1p38MJ7T8TzNQnoj6fVm+QCvt/usLEaubGjbvZO8Qtu6oJiBrDIEgRSWeABowTgNFElJ1d1nDZbCz7OJRxfde+4TAVjWYDUBxqWjHuC2iD68n6VORE9eryQasW2PZWR9xGLCnpYex7ZGDqm3IgUkKdWpqDuBhxfymQeF4nAhqBrO0tBonsYz6XXck1DvETUIfDyiqOxyAEh6d8W7tNsu/oXKG33wBFPSTq5P4J3UFcUzb4+KVEwXWSb+4hCJQClqzuMwcTnlZQtZAh6G2AMUjFaI4egFk3OHSX1WK4LzrUMEYLi3uPSk70wiN8pSiuWku9GM4S5pgxxvT4g8YQM/QbN1nlwrliKEJskRRuhzKbiM/IMtu/WAmXzKl0q7VvuNMAlmNA400CVYroH0ty67QOZt0pmg6Qfa89Tp25lcBZUMGINuml+Xr5ntPD/VIclZ6hosAyXxl4aTjgRPwxOY+9Zd/fckJBO6yUH/guvNNLpPC+w7EU55/W4Ygs27ZdOj/rwsLo+YowTqG1rEbJqtgDLN+m5TVCdBl+mMp/+QyC7AKXQHX4KmScVmHJjeMeFLRIjNT6KG1+PW3FRa0JNxK+BKTO+Pai2xNTaKJIeYBeL75fBWY/d8doR4rVFptS3G+9fRR/WlqLWllvIjIz1dPPFa1KWqq1JggDuOJxMEqGDAQ90C1LbycAHNsMaqKQi3EbXg1l+ILvbj5d+FsKKrTJAekRQI1mdg3vgSTGuCKDeN3ygOEvGSnKGF92XZrIBbE3crEHFKPXEbKuSIwid/OO/OoXYLyp0/33Wk27RwNhtx/2NNa46WqV0/aM5Va4fEQY8CGM3uw70w8L/Ie+TEg/HTUOuslrILLh4j565CO9in8R8R1iwlXuEwQCdn89JTXf1Ke4hj6wXpzusx4CcfWX1aj3ofXxJBSHfjAYmOwyFm2XW8SqLzr7wuIDTi5M7QDTW1toXmNXutxmZ3yloMEGFhXgsVHTrdm7i82HMxsxDfryfxjK/bdzmo7ywXmiqb21mVJSFY2SDd1WIzPyOlzYrqGmqVGK9BdLt+j+diw+xLpY31B41Zuy/XnJxjdInw0jSBa7CAtxduQHcQSQaJq6b1VzR4/LJ2/JKYasS8MzA1V1TQRRuUB1PajjPLdwDJS8S0RKI3LN6jsVGMZbDnwrv3QkuZKmyXuTgJ7DXNC8yBsXzaKar+24qkugk6v0D8j2BiCr+hmkyYMsoGuYcojtXcx3o9ItQClyQwKLOB9iaxCyE7oiL99WHNnC9yHIDumm++dC64rfq/zbShqrK8i80gtBlyim8d75kT7mGnnGPt/gxsRJVVIUCPntER9L/8V97GceGmJD4IzLl/ZKmZX5jaQym4X6KIYC5id7rGBLQ1MdrftTLm65IaQNCSAe9eEG8mSSLY5d2G2pYIw+WPBIJ1TaMqromZGi+825qWTB+ZsTuQtvf7dvoDuLy/dSC+5sae+s0P2Vu8TJrEcKrJ0pprlsyLCMHBV2u8qiPOlvKKRiHeS+SP5ip2cfyQ/C4TgT/nu1wkfc8thFoQpHDaBie8Iq7mZDlGwGbGOEVKWcgK8Efh5rWIVtL/jvCqVsehGfPEnnX5vxm7+ieQaQrhqOkbGrcGjDTmEjBsQ7s800YEg523wKEGeXgkPJ7RYuXKBSVrzxxANWVHezMLVtQqNlIdQltqAjxVwLU1w6L5efIoYN3g8hzMnH27fT6UBmiXEZCSdbhKUQnJxdvSaLxYU0VTw37K8YqzcvT77L9YbNBo4BItBGGVNtuckFg+6wBqI90mU+uhoikKftYLa8gGlE78cgTr2hUEGQvdvOug6Sv+PCVWvSgdm98gO6ue3ddrUK1Nu5DYDcLveCdBp0EVOndjQzCfxdpIcInStR8lp3OzRN1RxuniBSBJucrzIoA0k9eetxJopbZ6Olhgrth19Ijv9Tq8nUy+i0Smgo+mNQMBT6bMMdEPL8xd1tbmESUluCPuY7bDhmhH3RcWZ/1mFcCkEUPLJthx+EeoIOML73L9+cJy7E3AfArviu5LuD3gsXSaifMH8zE7gR0oS3Pg9nrPWa5DXGMWpk8eMbVsgSbBkmO6JTPuNzBGdHX9dVyilBtlKjSpNMu9XDRm9bj0AHB1c7z+nC+YbVM0Hx0wh0vRYm7nG7RLEz34Rqb2TAfJLfpN1NGLpPwEJWrvQhVcaWQZ70jz3+KASFsC4oQ/07TFtUW1bUuLXnId4GJ4Gm6aksEJkMYhhCN9xSBDx7ORR+/tupupcOF9NSXz1zrdGixhmnjKsrEpgNTHKdZS7g30CWwJqT3kB1V1PSsLD0SR41eeHn5bgt+mLYHDxdJgOHO11MxhOo7H7CZMllzBIymWJfV3aIKfnlzXEY819+5+nAE1V96HoscpYFaFyHwm/stLlA3AiKW4WCNs1iKJvD8f20HCqruh2I2vZIpSbuTflMm6kcBbPTMgdwuOdejcYwqLxKzQ8P/fTl9KNN4X4363dY32k3aL3QJkZ2+/pvnqVklXNLJ8+OD8BLY3S9ldM1sV6B7aD668aI1BrqJPD39NCDDq/UgC07csfQ9iNfhsBrCGVcMteUSex1VLCQqk2QzG7fOop0ZYsnZqGn4oHPwgkhJaeyzxTbhnWsnr2FesadKjNMgAXTmHto2lOa7nXAqexnsKr+kKh7iRGQZF//vPwAEj18POW0cg3GLJ2ZKVwe7R03K3HcoTyraOSJGNqJ1IRLUKC4k/muUJQIiI95+3eWHCXNrG/Srn/sRcgq2tWDTs+skwM9Cr9KBrmU6A85MjxwW7tAADZr7yh6mdKd9N6M1BI0mXtiCBqRRrQyb7vxuTRhNNiQ/xsbPFRBOphCeEnSYKatTJiJvc4di77/FwaU18WAL3/DTzC/QnQxb+47rmPuGuZ8/kYWkCNJ7CTdt+9MDBoTd43ZAQt24hx8ot03XXxBdK8QzWJqZJa+4YH1Tgd2xYTKWg7UcMmcslgBMi0vQwxLH9hqtQ1L4I3bwGHGDV+cgoaaVlhnjbeVadO2gH487FrXN3edTYw/RJ3vD8AbaHNURzQLT2p0IFgu+ROpSouawGDMG34F7n8Rh0GFT0/W4XwhQf94HSL2B/PQvbJisMElc4PZnyFsApHxNp1frIaiYvgQDN2QbhfYT5DfeBY8/sXk7jdVm94w69959maoxhzjM6YBNtMS/Kq+8BgSYMzvD+nmDs9wphZ+x4j38N454KIRTdHXmgX0xGKtkPYEQT0WFP6UyGKnCnIO0vWp1m+x2ZOwYCmmaPeUEbuCTwQOrL/+sUzH6bpuGmyHXTslIPNPn42jAAAAA' };
+// The real files' pixel sizes are not known to this page, so a hot pink box for a failed image is this size (a guess).
+const ART_FALLBACK_SIZE = { width: 165, height: 320 };
+const textures = new Map();
+const failed = new Map();
+
+async function loadOne(slot, url) {
+  try {
+    textures.set(slot, await Assets.load(url, { strategy: 'retry', retryCount: 2, retryDelay: 1000 }));
+  } catch (e) {
+    failed.set(slot, { ...ART_FALLBACK_SIZE });
+    failedArt.push(slot);
+    console.warn(`Art for ${slot} did not load; a hot pink box stands in for it.`, e);
+  }
+}
+
+function pinkBox(width, height) {
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, width);
+  c.height = Math.max(1, height);
+  const g = c.getContext('2d');
+  g.fillStyle = '#ff69b4';
+  g.fillRect(0, 0, c.width, c.height);
+  return Texture.from(c);
+}
+
+function art(slot) {
+  const tex = textures.get(slot);
+  if (tex) return tex;
+  const f = failed.get(slot);
+  if (!f) return null;
+  f.box = f.box || pinkBox(f.width, f.height);
+  return f.box;
+}
+
+// ---------------------------------------------------------------------------------------------
+// src/world/world.ts (the parts that draw, zoom and move the camera)
+
+const TILES_SHORT = 10.5;
+const PHONE_BODY_PX = 44;
+const OLLI_SIZE = 11; // LOOKS.olli.size in src/art/characters.ts
+const FULL_TILT = 0.2;
+
+class World {
+  constructor(game, map, halftone) {
+    this.game = game;
+    this.map = map;
+    this.view = new Container();
+    this.scene = new Container();
+    this.arcadeSorted = new Container({ sortableChildren: true });
+    this.printRoot = new Container();
+    this.printSorted = new Container({ sortableChildren: true });
+    this.fx = new Container();
+    this.halftone = halftone;
+    this.props = [];
+    this.camX = 0;
+    this.camY = 0;
+    this.zoom = 1;
+    this.baseZoom = 1;
+    this.tilt = 0;
+    this.viewW = 1;
+    this.viewH = 1;
+    this.propTick = 0;
+    this.plantTurns = 0;
+    // The point the camera looks at (the game's cameraTarget), here moved by dragging.
+    this.target = { x: 15.5 * TILE, y: 13.5 * TILE };
+
+    this.terrain = new TerrainView(map);
+    const world = String(map.props.world ?? 'print');
+    this.sorted = world === 'arcade' ? this.arcadeSorted : this.printSorted;
+    this.printRoot.addChild(this.terrain.print, this.printSorted);
+    this.scene.addChild(this.terrain.arcade, this.arcadeSorted, this.printRoot, this.fx);
+    this.view.addChild(this.scene);
+    if (world !== 'arcade') this.printRoot.filters = [halftone];
+    this.buildObjects();
+  }
+
+  get world() {
+    return String(this.map.props.world ?? 'print');
+  }
+
+  localPlant(o, kind) {
+    const local = PLANTS[this.map.id];
+    if (!LOOK.has('plants') || kind !== 'palm' || !local) return kind;
+    const [tx, ty] = [Math.floor(o.x / TILE), Math.floor((o.y - 1) / TILE)];
+    const water = TERRAINS.findIndex((t) => t.id === 'water');
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const [x, y] = [tx + dx, ty + dy];
+        if (x >= 0 && y >= 0 && x < this.map.width && y < this.map.height && this.map.terrain[y * this.map.width + x] === water) return local.wet;
+      }
+    }
+    return local.dry[this.plantTurns++ % local.dry.length];
+  }
+
+  buildObjects() {
+    for (const o of this.map.objects) {
+      if (o.type !== 'prop') continue;
+      // Every palm takes its turn, as in the game, but only the ones inside the slice are put on the page.
+      const kind = this.localPlant(o, String(o.props.kind));
+      const [tx, ty] = [Math.floor(o.x / TILE), Math.floor((o.y - 1) / TILE)];
+      if (!inSlice(tx, ty)) continue;
+      const info = PROPS[kind];
+      if (!info) continue;
+      let view;
+      const tex = art(`props/${kind}`);
+      if (tex) {
+        const sprite = new Sprite(tex);
+        sprite.anchor.set(0.5, 1);
+        const gfx = sprite;
+        gfx.position.set(o.x, o.y);
+        gfx.zIndex = o.y;
+        this.sorted.addChild(gfx);
+        view = { obj: o, gfx, kind, animated: false, base: info.height / tex.height, ...(info.motion ? { motion: info.motion } : {}) };
+      } else {
+        const drawing = new Graphics();
+        info.draw(drawing, 0);
+        const gfx = drawing;
+        gfx.position.set(o.x, o.y);
+        gfx.zIndex = o.y;
+        this.sorted.addChild(gfx);
+        view = { obj: o, gfx, drawing, kind, animated: Boolean(info.animate), ...(info.drawn ? { base: info.height / info.drawn } : {}) };
+      }
+      this.props.push(view);
+    }
+  }
+
+  updateZoom() {
+    this.zoom = this.baseZoom;
+    this.halftone.setDot(Math.max(1.6, Math.min(4.2, this.zoom * 1.5)), this.halftone.deviceRes);
+  }
+
+  layout(panelW, panelH) {
+    this.baseZoom = thumbReach(this.game.layout) ? PHONE_BODY_PX / (OLLI_SIZE * 2) : Math.min(panelW, panelH) / (TILES_SHORT * TILE);
+    this.updateZoom();
+    this.viewW = panelW;
+    this.viewH = panelH;
+    this.snapCamera();
+  }
+
+  get ground() {
+    return 1 - FULL_TILT * this.tilt;
+  }
+
+  tiltAt(x) {
+    const p = this.map.props;
+    if (this.world === 'arcade') return 0;
+    const t = p.tilt === undefined || String(p.tilt).trim() === '' ? NaN : Number(p.tilt);
+    const full = Number.isFinite(t) ? Math.max(0, Math.min(1, t)) : 1;
+    return full * this.easeAt(x);
+  }
+
+  easeAt(x) {
+    const p = this.map.props;
+    const ease = typeof p.tilt_ease_x === 'string' ? p.tilt_ease_x.split(',').map(Number) : null;
+    if (!ease || ease.length !== 2 || ease.some((v) => !Number.isFinite(v))) return 1;
+    const [a, b] = ease;
+    const k = Math.max(0, Math.min(1, (x / TILE - a) / (b - a || 1)));
+    return k * k * (3 - 2 * k);
+  }
+
+  // The look-at point stays east of the tilt's ease columns (x 9 to 14) and inside the slice.
+  clampTarget() {
+    this.target.x = Math.max(14 * TILE, Math.min((SLICE.x1 + 1) * TILE, this.target.x));
+    this.target.y = Math.max(SLICE.y0 * TILE, Math.min((SLICE.y1 + 1) * TILE, this.target.y));
+  }
+
+  // The game clamps to the map's edges; here the slice's edges stand in for them.
+  cameraGoal() {
+    const t = this.target;
+    let x = t.x;
+    let y = t.y;
+    const halfW = this.viewW / 2 / this.zoom;
+    const halfH = this.viewH / 2 / (this.zoom * this.ground);
+    const [x0, x1] = [SLICE.x0 * TILE, (SLICE.x1 + 1) * TILE];
+    const [y0, y1] = [SLICE.y0 * TILE, (SLICE.y1 + 1) * TILE];
+    const left = x0 + halfW;
+    const right = x1 - halfW;
+    x = left > right ? (left + right) / 2 : Math.max(left, Math.min(right, x));
+    const lo = y0 + halfH;
+    const hi = y1 - halfH;
+    y = lo > hi ? (lo + hi) / 2 : Math.max(lo, Math.min(hi, y));
+    return [x, y];
+  }
+
+  snapCamera() {
+    this.tilt = this.tiltAt(this.target.x);
+    [this.camX, this.camY] = this.cameraGoal();
+  }
+
+  panBy(dxPanel, dyPanel) {
+    this.target.x -= dxPanel / this.zoom;
+    this.target.y -= dyPanel / (this.zoom * this.ground);
+    this.clampTarget();
+  }
+
+  panelToWorld(px, py) {
+    return [(px - this.viewW / 2) / this.zoom + this.camX, (py - this.viewH / 2) / (this.zoom * this.ground) + this.camY];
+  }
+
+  update(dt) {
+    this.tilt = this.tiltAt(this.target.x);
+    const [gx, gy] = this.cameraGoal();
+    const k = 1 - Math.exp(-dt * 7);
+    this.camX += (gx - this.camX) * k;
+    this.camY += (gy - this.camY) * k;
+  }
+
+  render(t) {
+    const upright = 1 / this.ground;
+    const [vx0, vy0] = this.panelToWorld(0, 0);
+    const [vx1, vy1] = this.panelToWorld(this.viewW, this.viewH);
+    this.terrain.update(t, [vx0 - TILE, vy0 - TILE, vx1 + TILE, vy1 + TILE]);
+    if (++this.propTick % 3 === 0) {
+      for (const p of this.props) {
+        if (!p.animated || !p.drawing) continue;
+        p.drawing.clear();
+        PROPS[p.kind].draw(p.drawing, t);
+      }
+    }
+    for (const p of this.props) {
+      const k = p.base ?? 1;
+      const still = motion.reduced;
+      const pulse = p.motion === 'pulse' && !still ? 1 + Math.sin(t * 3) * 0.08 : 1;
+      if (p.motion === 'sway') p.gfx.skew.x = still ? 0 : Math.sin(t * 1.3 + p.obj.x * 0.05) * 0.04;
+      const grow = p.grow ?? 1;
+      p.gfx.scale.set((p.mirror ? -1 : 1) * k * pulse * grow, k * pulse * upright * grow);
+    }
+    this.scene.scale.set(this.zoom, this.zoom * this.ground);
+    this.scene.position.set(this.viewW / 2 - this.camX * this.zoom, this.viewH / 2 - this.camY * this.zoom * this.ground);
+    this.halftone.strength = this.game.settings.halftone ? PRINT.strength : 0;
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Boot, as src/main.ts and Game (the stage, the relayout, the viewport)
+
+async function main() {
+  const host = document.getElementById('game');
+  const app = new Application();
+  await app.init({
+    antialias: true,
+    autoDensity: true,
+    resolution: Math.min(window.devicePixelRatio || 1, 3),
+    background: PAPER,
+    preference: 'webgl',
+    width: host.clientWidth || window.innerWidth,
+    height: host.clientHeight || window.innerHeight,
+  });
+  host.appendChild(app.canvas);
+  app.canvas.addEventListener('webglcontextlost', () => {
+    window.setTimeout(() => location.reload(), 1500);
+  });
+
+  await Promise.all(Object.entries(ART_URLS).map(([slot, url]) => loadOne(slot, url)));
+  if (failedArt.length) noteFailedArt();
+
+  const game = { layout: computeLayout(1, 1), settings: { halftone: true } };
+  const halftone = new HalftoneFilter({ dot: 3.6, resolution: app.renderer.resolution, paper: PAPER, strength: PRINT.strength });
+  const map = buildMap();
+  const world = new World(game, map, halftone);
+
+  const root = new Container();
+  const viewport = new Container();
+  const viewportMatte = new Graphics();
+  const panel = new Container();
+  const panelMask = new Graphics();
+  const backdrop = new Graphics();
+  const worldLayer = new Container();
+  panel.addChild(backdrop, worldLayer);
+  panel.mask = panelMask;
+  viewport.addChild(panel, panelMask);
+  root.addChild(viewportMatte, viewport);
+  app.stage.addChild(root);
+  worldLayer.addChild(world.view);
+
+  let turn = 0;
+  let turnedAt = -Infinity;
+  let sizeAtTurn = null;
+  let turnUnsure = false;
+  let safeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
+
+  // Mirrors Game.placeViewport at full lift: the panel grows to the safe bounds, with the same aspect.
+  function placeViewport() {
+    const p = game.layout.panel, fit = expandedPanel(game.layout, safeInsets);
+    const lift = 1;
+    const amount = motion.reduced ? (lift >= 0.5 ? 1 : 0) : lift * lift * (3 - 2 * lift);
+    const scale = 1 + (fit.w / p.w - 1) * amount;
+    const x = p.x + (fit.x - p.x) * amount - p.x * scale;
+    const y = p.y + (fit.y - p.y) * amount - p.y * scale;
+    viewport.scale.set(scale);
+    viewport.position.set(x, y);
+  }
+
+  function relayout() {
+    const { w, h } = viewportSize();
+    app.renderer.resize(w, h);
+    const s = readScreen();
+    const fresh = readingIsFresh({ now: performance.now(), turnedAt, size: [w, h], sizeAtTurn });
+    turn = chooseTurn({ phone: s.phone, vw: w, vh: h, angle: s.angle, last: turn, fresh });
+    const fits = w > h ? s.angle === 90 || s.angle === 270 : s.angle === 0 || s.angle === 180;
+    turnUnsure = s.phone && !fits;
+    const r = rootPlacement(turn, w, h);
+    root.rotation = r.rotation;
+    root.position.set(r.x, r.y);
+    const [lw, lh] = uprightSize(turn, w, h);
+    safeInsets = turnInsets(readSafeInsets(), turn);
+    game.layout = computeLayout(lw, lh, safeInsets, 1);
+    const p = game.layout.panel;
+    panel.position.set(p.x, p.y);
+    panelMask.clear().rect(p.x, p.y, p.w, p.h).fill(0xffffff);
+    viewportMatte.clear().rect(0, 0, lw, lh).fill(0x000000);
+    placeViewport();
+    backdrop.clear().rect(0, 0, p.w, p.h).fill(PAPER);
+    world.layout(p.w, p.h);
+    updateReadout(true);
+  }
+
+  let pending = false;
+  const schedule = () => {
+    if (pending) return;
+    pending = true;
+    requestAnimationFrame(() => {
+      pending = false;
+      relayout();
+    });
+  };
+  window.addEventListener('resize', schedule);
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', schedule);
+  const turned = () => {
+    turnedAt = performance.now();
+    const v = viewportSize();
+    sizeAtTurn = [v.w, v.h];
+    schedule();
+    window.setTimeout(() => turnUnsure && schedule(), STALE_MS + 100);
+  };
+  window.addEventListener('orientationchange', turned);
+  if (screen.orientation) screen.orientation.addEventListener('change', turned);
+
+  // The loop: fixed steps for the camera, one render per frame.
+  const loop = new FixedLoop((dt) => world.update(dt), () => world.render(loop.time));
+  app.ticker.add((t) => loop.tick(t.deltaMS / 1000));
+
+  // --- Controls (DOM, outside the filtered container) ---
+  const printBtn = document.getElementById('printBtn');
+  printBtn.addEventListener('click', () => {
+    game.settings.halftone = !game.settings.halftone;
+    printBtn.textContent = 'Print: ' + (game.settings.halftone ? 'on' : 'off');
+  });
+
+  // One-finger (or mouse) drag pans the camera's look-at point.
+  let drag = null;
+  const canvas = app.canvas;
+  const panelPoint = (e) => {
+    const r = canvas.getBoundingClientRect();
+    const at = panel.toLocal({ x: e.clientX - r.left, y: e.clientY - r.top });
+    return [at.x, at.y];
+  };
+  canvas.addEventListener('pointerdown', (e) => {
+    if (drag || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    drag = { id: e.pointerId, last: panelPoint(e) };
+    try { canvas.setPointerCapture(e.pointerId); } catch (_) { /* not every browser allows it */ }
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const p = panelPoint(e);
+    world.panBy(p[0] - drag.last[0], p[1] - drag.last[1]);
+    drag.last = p;
+  });
+  const endDrag = (e) => { if (drag && e.pointerId === drag.id) drag = null; };
+  canvas.addEventListener('pointerup', endDrag);
+  canvas.addEventListener('pointercancel', endDrag);
+
+  // --- Readout ---
+  let gpu = 'not given';
+  try {
+    const gl = app.renderer.gl;
+    const ext = gl && gl.getExtension('WEBGL_debug_renderer_info');
+    if (ext) gpu = String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL));
+  } catch (_) { /* leave it as not given */ }
+  const readout = document.getElementById('readout');
+  let readoutOpen = true;
+  readout.addEventListener('click', () => { readoutOpen = !readoutOpen; updateReadout(true); });
+  let lastReadout = '';
+  function updateReadout(force) {
+    const l = game.layout;
+    const vv = viewportSize();
+    const lines = [
+      readoutOpen ? 'tap to hide' : 'info (tap)',
+    ];
+    if (readoutOpen) {
+      lines.push(
+        'devicePixelRatio ' + (window.devicePixelRatio || 1),
+        'renderer resolution ' + app.renderer.resolution,
+        'CSS viewport ' + vv.w + ' x ' + vv.h,
+        'orientation ' + l.orientation + ', compact ' + l.compact,
+        'turn ' + turn + ', viewport scale ' + viewport.scale.x.toFixed(3),
+        'zoom ' + world.zoom.toFixed(3),
+        'uDot ' + halftone.u.uDot.toFixed(3) + ' CSS px (uRes ' + halftone.u.uRes + ')',
+        'renderer ' + app.renderer.name,
+        'GPU ' + gpu,
+      );
+    }
+    const text = lines.join('\n');
+    if (force || text !== lastReadout) {
+      readout.textContent = text;
+      lastReadout = text;
+    }
+  }
+  setInterval(() => updateReadout(false), 500);
+
+  relayout();
+}
+
+main().catch((err) => {
+  console.error(err);
+  fail('The page could not start.\n\n' + String((err && err.stack) || err));
+});
+})();
+</script>
+</body>
+</html>
