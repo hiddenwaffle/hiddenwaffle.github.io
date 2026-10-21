@@ -8,303 +8,449 @@
   <title>hiddenwaffle · Games &amp; other stuff</title>
   <link rel="icon" href="./favicon.ico">
   <style>
+    /* ===== Tokens ===== */
     :root {
       color-scheme: dark;
-      --background: #191c1a;
+      --bg: #191c1a;
       --surface: #222622;
+      --tile-base: #1e211d;
       --ink: #f4f1e7;
       --muted: #acb1a5;
       --line: #3c4138;
       --yellow: #efc66c;
+      --pi: #10120f; /* nearly the background colour, on purpose */
+      --sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      --gutter: clamp(1rem, 4vw + .25rem, 4rem);
+      --max: 70rem;
+      --radius: 14px;
+      --tag-inset: .625rem; /* card number and platform tag sit this far inside the art */
+      --tag-height: 1.75rem;
+      --lift: -4px;
+      --timing: .18s ease;
     }
-    * { box-sizing: border-box; }
+
+    /* ===== Base ===== */
+    *, *::before, *::after { box-sizing: border-box; }
     html { scroll-behavior: smooth; }
     body {
       margin: 0;
-      background: var(--background);
+      background: var(--bg);
       color: var(--ink);
-      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font: 1rem/1.5 var(--sans);
       -webkit-font-smoothing: antialiased;
     }
+    h1, h2, h3, p, ul { margin: 0; }
+    ul[role="list"] { padding: 0; list-style: none; }
     a { color: inherit; }
-    a:focus-visible { outline: 3px solid var(--yellow); outline-offset: 6px; }
-    ::selection { background: var(--yellow); color: var(--background); }
-    .shell { width: min(1120px, calc(100% - 96px)); margin-inline: auto; }
-    .masthead { display: flex; align-items: center; justify-content: space-between; gap: 24px; min-height: 108px; border-bottom: 1px solid var(--line); }
-    .github { display: inline-flex; align-items: center; gap: 9px; font-size: 13px; font-weight: 600; text-decoration: none; padding-block: 12px; }
-    .github:hover { color: var(--yellow); }
-    .github svg { width: 18px; height: 18px; fill: currentColor; }
-    .intro { padding: 74px 0 57px; }
-    .eyebrow, .section-label, .card-number, .card-kind, .footer { font-family: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
-    .eyebrow { text-decoration: none; display: flex; align-items: center; gap: 10px; color: var(--yellow); font-size: 11px; letter-spacing: 1px; white-space: nowrap; margin: 0; }
-    .eyebrow::before { content: ""; width: 7px; height: 7px; background: currentColor; border-radius: 50%; }
-    h1 { font-size: clamp(44px, 7vw, 80px); font-weight: 750; line-height: 1.02; letter-spacing: -.065em; margin: 0; }
-    h1 span { color: var(--yellow); }
-    .game-section + .game-section { margin-top: 48px; }
-    .section-label { display: flex; justify-content: space-between; color: var(--muted); font-size: 10px; font-weight: 400; letter-spacing: 1.2px; text-transform: uppercase; margin: 0 0 16px; }
-    .section-label span:last-child { letter-spacing: 0; }
-    .games { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
-    .game { --accent: var(--yellow); display: flex; flex-direction: column; min-width: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); text-decoration: none; transition: border-color .18s ease, transform .18s ease; }
-    .game:hover { border-color: var(--accent); transform: translateY(-4px); }
-    .game:focus-visible { outline-color: var(--accent); }
-    .lighting { --accent: #a7c6b5; }
-    .mazing { --accent: #b9b3df; }
-    .starwars { --accent: #e7aa8d; }
-    .udm50 { --accent: #91c6d6; }
-    .art { position: relative; display: grid; place-items: center; height: 210px; overflow: hidden; color: var(--accent); background-color: #292d25; background-image: radial-gradient(#efc66c18 1px, transparent 1px); background-size: 16px 16px; border-bottom: 1px solid var(--line); }
-    .lighting .art { background-color: #24302b; background-image: radial-gradient(#a7c6b518 1px, transparent 1px); }
-    .mazing .art { background-color: #2b2836; background-image: radial-gradient(#b9b3df18 1px, transparent 1px); }
-    .starwars .art { background-color: #302a27; background-image: radial-gradient(#e7aa8d18 1px, transparent 1px); }
-    .udm50 .art { background-color: #243039; background-image: radial-gradient(#91c6d618 1px, transparent 1px); }
-    .card-number { position: absolute; top: 19px; left: 22px; font-size: 10px; opacity: .7; }
-    .art > svg { width: 244px; height: 166px; max-width: 90%; overflow: visible; }
-    .card-info { padding: 23px 25px 25px; }
-    .card-kind { color: var(--accent); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; margin: 0 0 9px; }
-    .card-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
-    .card-heading h4 { font-size: 29px; font-weight: 650; letter-spacing: -1px; margin: 0; }
-    .arrow { display: grid; place-items: center; width: 32px; height: 32px; flex-shrink: 0; border: 1px solid var(--line); border-radius: 50%; color: var(--accent); transition: color .18s ease, background .18s ease, border-color .18s ease; }
-    .arrow svg { width: 15px; height: 15px; }
-    .game:hover .arrow { background: var(--accent); border-color: var(--accent); color: var(--background); }
-    .description { color: var(--muted); font-size: 13px; line-height: 1.6; margin: 8px 0 0; }
-    .repository-label { display: inline-block; margin-top: 16px; color: var(--accent); font-size: 11px; text-decoration: underline; text-underline-offset: 4px; }
-    .footer { display: flex; justify-content: space-between; align-items: center; gap: 24px; border-top: 1px solid var(--line); margin-top: 48px; padding: 26px 0 32px; color: var(--muted); font-size: 11px; line-height: 1.6; }
-    .footer p { margin: 0; }
+    :focus-visible { outline: 3px solid var(--yellow); outline-offset: 4px; }
+    ::selection { background: var(--yellow); color: var(--bg); }
+
+    /* ===== Layout ===== */
+    .shell { width: min(var(--max), 100% - 2 * var(--gutter)); margin-inline: auto; }
+
+    .masthead {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0 1rem;
+      padding-block: .75rem;
+      border-bottom: 1px solid var(--line);
+    }
+    .wordmark { display: inline-flex; align-items: center; gap: .625rem; min-height: 2.75rem; color: var(--yellow); font: .8125rem var(--mono); text-decoration: none; }
+    .wordmark::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .site-nav ul { display: flex; gap: clamp(.25rem, 2vw, 1rem); }
+    .site-nav a {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: .5rem;
+      min-width: 2.75rem;
+      min-height: 2.75rem;
+      padding-inline: .25rem;
+      font-size: .875rem;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .site-nav svg { width: 18px; height: 18px; fill: currentColor; }
+    .site-nav .label { display: none; } /* icon only on the narrowest screens */
+    .site-nav a[aria-label] { justify-content: end; }
+
+    h1 {
+      margin-block: clamp(2.5rem, 1.25rem + 5vw, 4.5rem) clamp(2rem, 1rem + 3.5vw, 3.5rem);
+      font-size: clamp(2.75rem, 1.6rem + 3.5vw, 5rem);
+      font-weight: 700;
+      line-height: 1;
+      letter-spacing: -.05em;
+    }
+    h1 span { display: block; color: var(--yellow); }
+
+    .shelf + .shelf { margin-top: clamp(3rem, 2rem + 3vw, 4.5rem); }
+    .shelf h2 {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1.25rem;
+      font-size: 1.5rem;
+      font-weight: 600;
+      letter-spacing: -.02em;
+      scroll-margin-top: 1.5rem;
+    }
+    .shelf h2::after { content: ""; flex: 1; border-top: 1px solid var(--line); }
+
+    .footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1.5rem;
+      margin-top: clamp(3rem, 2rem + 4vw, 5rem);
+      padding-block: 1.5rem 2rem;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font: .8125rem/1.6 var(--mono);
+    }
     .footer a { text-underline-offset: 4px; }
-    .footer a:hover { color: var(--yellow); }
-    .pi { position: fixed; right: 32px; bottom: 32px; color: #10120f; text-decoration: none; font-family: Georgia, serif; font-size: 22px; line-height: 1; }
+
+    /* ===== Components ===== */
+
+    /* Card grid: one column on phones, two from 40em, four from 64em. */
+    main { counter-reset: project; }
+    .cards { --cols: 1; --gap: 1rem; display: grid; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); gap: var(--gap); }
+
+    /* Card. Each <li> sets --accent; the tile colours derive from it. */
+    .card {
+      --accent: var(--yellow);
+      --tile: color-mix(in oklab, var(--accent) 10%, var(--tile-base));
+      --panel: color-mix(in oklab, var(--tile), #000 25%);
+      --glow: 0 1.25rem 2.5rem -1.25rem color-mix(in srgb, var(--accent) 45%, transparent);
+      display: grid;
+      counter-increment: project;
+    }
+    .card > a {
+      display: grid;
+      grid-template: "art" auto "body" 1fr / minmax(0, 1fr);
+      overflow: hidden;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      text-decoration: none;
+      transition: border-color var(--timing), box-shadow var(--timing), translate var(--timing);
+    }
+
+    .art {
+      grid-area: art;
+      position: relative;
+      height: 12rem;
+      padding: calc(2 * var(--tag-inset) + var(--tag-height)) 1rem 1rem;
+      color: var(--accent);
+      background: radial-gradient(color-mix(in srgb, var(--accent) 11%, transparent) 1px, transparent 1px) 0 0 / 16px 16px, var(--tile);
+      border-bottom: 1px solid var(--line);
+    }
+    .art::before {
+      content: counter(project, decimal-leading-zero);
+      position: absolute;
+      top: var(--tag-inset);
+      left: 1rem;
+      color: color-mix(in oklab, var(--accent) 80%, var(--tile));
+      font: .75rem/var(--tag-height) var(--mono);
+    }
+    .art svg { display: block; width: 100%; height: 100%; overflow: visible; }
+    .art .fill-tile { fill: var(--tile); }
+    .art .fill-panel { fill: var(--panel); }
+    .art .fill-raised { fill: color-mix(in oklab, var(--tile), var(--accent) 8%); }
+    .art .stroke-tile { stroke: var(--tile); }
+
+    /* Platform tag: drawn in the art's top-right corner, read last in the link text.
+       "Desktop only" stays neutral; the phone-friendly tag takes the accent. */
+    .platform {
+      grid-area: art;
+      place-self: start end;
+      position: relative; /* paints above the positioned .art */
+      margin: var(--tag-inset);
+      padding-inline: .625rem;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--bg) 70%, transparent);
+      color: var(--muted);
+      font: .75rem/calc(var(--tag-height) - 2px) var(--mono);
+      white-space: nowrap;
+    }
+    .platform.phone { border-color: color-mix(in srgb, var(--accent) 60%, transparent); color: var(--accent); }
+
+    .card-body {
+      grid-area: body;
+      display: grid;
+      grid-template: "kind kind" "title go" "desc desc" "via via" / minmax(0, 1fr) auto;
+      align-content: start;
+      align-items: center;
+      padding: 1.25rem 1.375rem 1.5rem;
+    }
+    .card h3 { grid-area: title; font-size: 1.625rem; font-weight: 600; line-height: 1.2; letter-spacing: -.03em; overflow-wrap: break-word; }
+    .kind { grid-area: kind; margin-bottom: .375rem; color: var(--accent); font: .75rem/1.5 var(--mono); letter-spacing: .04em; }
+    .desc { grid-area: desc; max-width: 60ch; margin-top: .5rem; color: var(--muted); font-size: .9375rem; line-height: 1.55; text-wrap: balance; }
+    .via { grid-area: via; margin-top: .75rem; color: var(--muted); font: .75rem var(--mono); white-space: nowrap; transition: color var(--timing); }
+    .go {
+      grid-area: go;
+      display: grid;
+      place-items: center;
+      width: 2rem;
+      height: 2rem;
+      margin-left: .75rem;
+      border: 1px solid var(--line);
+      border-radius: 50%;
+      color: var(--accent);
+      transition: background-color var(--timing), border-color var(--timing), color var(--timing);
+    }
+    .go svg { width: 15px; height: 15px; }
+
+    /* Easter egg from the original 2019 page: nearly invisible until focused. */
+    .pi { padding: .25rem .5rem; color: var(--pi); font: 1.375rem/1 Georgia, serif; text-decoration: none; }
     .pi:focus-visible { color: var(--yellow); }
-    @media (max-width: 640px) {
-      .shell { width: calc(100% - 40px); }
-      .masthead { min-height: 84px; gap: 16px; }
-      .eyebrow { font-size: 10px; letter-spacing: .3px; }
-      .intro { padding: 51px 0 40px; }
-      .game-section + .game-section { margin-top: 32px; }
-      .games { grid-template-columns: 1fr; gap: 18px; }
-      .art { height: 190px; }
-      .card-info { padding: 21px 22px 23px; }
-      .footer { margin-top: 32px; font-size: 10px; }
+
+    /* ===== States: hover on pointer devices, keyboard focus everywhere ===== */
+    .site-nav a:focus-visible, .footer p a:focus-visible { color: var(--yellow); }
+    .card > a:focus-visible { outline-color: var(--accent); border-color: var(--accent); box-shadow: var(--glow); translate: 0 var(--lift); }
+    .card > a:focus-visible .go { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+    .card > a:focus-visible .via { color: var(--accent); }
+    @media (hover: hover) {
+      .site-nav a:hover, .footer p a:hover { color: var(--yellow); }
+      .card > a:hover { border-color: var(--accent); box-shadow: var(--glow); translate: 0 var(--lift); }
+      .card > a:hover .go { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+      .card > a:hover .via { color: var(--accent); }
     }
+
+    /* ===== Breakpoints ===== */
+    @media (min-width: 24em) {
+      .site-nav .label { display: inline; }
+    }
+    @media (min-width: 40em) {
+      .cards { --cols: 2; --gap: 1.25rem; }
+      /* A card alone on its shelf spans the row, with its art as wide as one column. */
+      .card:only-child { grid-column: 1 / -1; }
+      .card:only-child > a { grid-template: "art body" auto / calc((100% - (var(--cols) - 1) * var(--gap)) / var(--cols)) minmax(0, 1fr); }
+      .card:only-child .art {
+        display: grid;
+        align-content: center;
+        height: auto; /* stretch with the text beside it */
+        min-height: 12rem;
+        border-bottom: 0;
+        border-right: 1px solid var(--line);
+      }
+      .card:only-child .art svg { height: 8rem; }
+      .card:only-child .card-body { align-content: center; padding-inline: clamp(1.5rem, 3vw, 2.5rem); }
+    }
+    @media (min-width: 64em) {
+      .cards { --cols: 4; }
+      .card h3 { font-size: 1.5rem; }
+      h1 span { display: inline; }
+      .card:only-child .card-body { grid-template: "kind via go" "title via go" "desc via go" / minmax(0, 1fr) auto auto; }
+      .card:only-child .via { margin: 0 0 0 1rem; }
+    }
+    @media (min-width: 80em) {
+      .pi { position: fixed; right: 1.5rem; bottom: 1.5rem; }
+    }
+
+    /* ===== Preferences ===== */
     @media (prefers-reduced-motion: reduce) {
+      :root { --lift: 0px; }
       html { scroll-behavior: auto; }
-      *, *::before, *::after { transition: none !important; }
+      .card > a, .go, .via { transition: none; }
     }
-
-    /* Category menu and project sections. */
-    .categories { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
-    .category-card { --accent: var(--yellow); display: flex; flex-direction: column; min-width: 0; padding: 28px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; text-decoration: none; transition: border-color .18s ease, transform .18s ease; }
-    .category-card:hover { border-color: var(--accent); transform: translateY(-4px); }
-    .category-card:focus-visible { outline-color: var(--accent); }
-    .category-tools { --accent: #91c6d6; }
-    .category-misc { --accent: #b9b3df; }
-    .category-top { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 47px; }
-    .category-icon { width: 48px; height: 48px; color: var(--accent); }
-    .category-count { color: var(--muted); font-family: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 10px; white-space: nowrap; }
-    .category-title-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-    .category-title { font-size: 32px; font-weight: 650; letter-spacing: -1px; margin: 0; }
-    .category-card .description { margin-top: 12px; }
-    .back-link { display: inline-flex; align-items: center; gap: 9px; padding-block: 8px; color: var(--muted); font-size: 12px; text-decoration: none; }
-    .back-link:hover { color: var(--yellow); }
-    .back-link svg { width: 16px; height: 16px; }
-    .empty-state { padding: 42px 32px; border: 1px dashed var(--line); border-radius: 14px; }
-    .empty-state p { color: var(--muted); font-size: 15px; line-height: 1.7; margin: 0; }
-    @media (max-width: 900px) {
-      .categories { grid-template-columns: 1fr; gap: 18px; }
-      .category-card { display: grid; grid-template-columns: 48px 1fr; column-gap: 24px; padding: 25px; }
-      .category-top { display: contents; }
-      .category-icon { grid-column: 1; grid-row: 1 / 4; align-self: center; }
-      .category-count { grid-column: 2; grid-row: 1; margin-bottom: 8px; }
-      .category-title-row { grid-column: 2; grid-row: 2; }
-      .category-card .description { grid-column: 2; grid-row: 3; }
-    }
-    @media (max-width: 640px) {
-      .category-card { padding: 22px; column-gap: 18px; }
-      .category-title { font-size: 28px; }
-      .category-card .description { font-size: 12px; }
-      .empty-state { padding: 30px 24px; }
-    }
-
-
-    .categories { scroll-margin-top: 24px; }
-    .project-category { margin-top: 80px; padding-top: 32px; border-top: 1px solid var(--line); scroll-margin-top: 24px; }
-    .category-heading { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 32px; }
-    .category-heading h2 { font-size: clamp(32px, 5vw, 48px); font-weight: 650; line-height: 1.1; letter-spacing: -2px; margin: 0; }
-    @media (max-width: 640px) {
-      .project-category { margin-top: 56px; padding-top: 24px; }
-      .category-heading { gap: 16px; margin-bottom: 26px; }
-      .back-link { font-size: 11px; gap: 7px; }
+    @media (forced-colors: active) {
+      .art .fill-tile, .art .fill-panel, .art .fill-raised { fill: Canvas; }
+      .art .stroke-tile { stroke: Canvas; }
+      .wordmark::before { forced-color-adjust: none; background: CanvasText; }
+      .pi { forced-color-adjust: none; color: Canvas; }
+      .pi:focus-visible { color: Highlight; outline-color: Highlight; }
     }
   </style>
 </head>
 <body id="top">
   <div class="shell">
     <header class="masthead">
-      <a class="eyebrow" href="#top">hiddenwaffle.github.io</a>
-      <a class="github" href="https://github.com/hiddenwaffle">
-        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 .9a11.1 11.1 0 0 0-3.5 21.6c.6.1.8-.2.8-.5v-2c-3.3.7-4-1.4-4-1.4-.5-1.4-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.6 1.3 3.3 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.4-5.5-6.1 0-1.3.5-2.4 1.2-3.3-.1-.3-.5-1.6.1-3.2 0 0 1-.3 3.4 1.2a11.8 11.8 0 0 1 6.2 0c2.4-1.5 3.4-1.2 3.4-1.2.6 1.6.2 2.9.1 3.2.8.9 1.2 2 1.2 3.3 0 4.7-2.8 5.8-5.5 6.1.4.4.8 1.1.8 2.2V22c0 .3.2.6.8.5A11.1 11.1 0 0 0 12 .9Z"/></svg>
-        GitHub
-      </a>
-    </header>
-    <main>
-      <section class="intro" aria-labelledby="intro-title">
-        <h1 id="intro-title">Games &amp;<br><span>other stuff.</span></h1>
-      </section>
-      <nav id="categories" tabindex="-1" class="categories" aria-label="Categories">
-        <a class="category-card category-games" href="#games" aria-labelledby="games-category-title games-category-count games-category-description">
-          <div class="category-top"><svg class="category-icon" aria-hidden="true" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 13h18c4 0 6 3 7 7l4 15c1 5-4 7-7 3l-6-7H17l-6 7c-3 4-8 2-7-3l4-15c1-4 3-7 7-7Z"/><path d="M15 19v10m-5-5h10"/><circle cx="32" cy="21" r="1.5" fill="currentColor"/><circle cx="36" cy="26" r="1.5" fill="currentColor"/></svg><span class="category-count" id="games-category-count">4 games</span></div>
-          <div class="category-title-row"><span class="category-title" id="games-category-title">Games</span><span class="arrow" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 10h12m-5-5 5 5-5 5"/></svg></span></div>
-          <p class="description" id="games-category-description">Cards, blocks, mazes, and a text adventure.</p>
-        </a>
-        <a class="category-card category-tools" href="#tools" aria-labelledby="tools-category-title tools-category-count tools-category-description">
-          <div class="category-top"><svg class="category-icon" aria-hidden="true" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="40" height="32" rx="5"/><path d="M4 17h40m-31 8 6 5-6 5m13 0h9"/><circle cx="11" cy="12.5" r="1" fill="currentColor"/><circle cx="17" cy="12.5" r="1" fill="currentColor"/></svg><span class="category-count" id="tools-category-count">1 tool</span></div>
-          <div class="category-title-row"><span class="category-title" id="tools-category-title">Tools</span><span class="arrow" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 10h12m-5-5 5 5-5 5"/></svg></span></div>
-          <p class="description" id="tools-category-description">Small tools for everyday use.</p>
-        </a>
-        <a class="category-card category-misc" href="#misc" aria-labelledby="misc-category-title misc-category-count misc-category-description">
-          <div class="category-top"><svg class="category-icon" aria-hidden="true" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="6" y="7" width="13" height="13" rx="2"/><circle cx="34" cy="13.5" r="7"/><path d="m12.5 28 8 13h-16Zm20-2 3.5 6.5L43 34l-7 3.5-1.5 7L30 39l-7-1 5-5Z"/></svg><span class="category-count" id="misc-category-count">0 projects</span></div>
-          <div class="category-title-row"><span class="category-title" id="misc-category-title">Misc</span><span class="arrow" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 10h12m-5-5 5 5-5 5"/></svg></span></div>
-          <p class="description" id="misc-category-description">Everything else.</p>
-        </a>
+      <a class="wordmark" href="#top">hiddenwaffle</a>
+      <nav class="site-nav" aria-label="Site">
+        <ul role="list">
+          <li><a href="#games">Games</a></li>
+          <li><a href="#tools">Tools</a></li>
+          <!-- <li><a href="#misc">Misc</a></li> -->
+          <li>
+            <a href="https://github.com/hiddenwaffle" aria-label="GitHub">
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 .9a11.1 11.1 0 0 0-3.5 21.6c.6.1.8-.2.8-.5v-2c-3.3.7-4-1.4-4-1.4-.5-1.4-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.6 1.3 3.3 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.4-5.5-6.1 0-1.3.5-2.4 1.2-3.3-.1-.3-.5-1.6.1-3.2 0 0 1-.3 3.4 1.2a11.8 11.8 0 0 1 6.2 0c2.4-1.5 3.4-1.2 3.4-1.2.6 1.6.2 2.9.1 3.2.8.9 1.2 2 1.2 3.3 0 4.7-2.8 5.8-5.5 6.1.4.4.8 1.1.8 2.2V22c0 .3.2.6.8.5A11.1 11.1 0 0 0 12 .9Z"/></svg>
+              <span class="label">GitHub</span>
+            </a>
+          </li>
+        </ul>
       </nav>
-      <section class="project-category" id="games" tabindex="-1" aria-labelledby="games-heading">
-        <header class="category-heading"><h2 id="games-heading">Games</h2><a class="back-link" href="#categories"><svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 16V4m-5 5 5-5 5 5"/></svg>All categories</a></header>
-      <section class="game-section" aria-labelledby="desktop-mobile-title">
-        <h3 class="section-label" id="desktop-mobile-title"><span>Desktop / mobile</span><span>1 game</span></h3>
-        <div class="games">
-          <a class="game matching" href="./matching" aria-labelledby="matching-title matching-description">
-            <div class="art" aria-hidden="true">
-              <span class="card-number">01</span>
-              <svg viewBox="0 0 244 166" fill="none">
-                <g transform="translate(53 25) rotate(-12 42 56)">
-                  <rect width="84" height="112" rx="9" fill="#24271f" stroke="currentColor" stroke-width="2"/>
-                  <rect x="7" y="7" width="70" height="98" rx="4" stroke="currentColor" stroke-opacity=".35"/>
-                  <path d="m42 38 14 19-14 19-14-19Z" fill="currentColor"/>
-                </g>
-                <g transform="translate(112 30) rotate(12 42 56)">
-                  <rect width="84" height="112" rx="9" fill="#393c2a" stroke="currentColor" stroke-width="2"/>
-                  <rect x="7" y="7" width="70" height="98" rx="4" stroke="currentColor" stroke-opacity=".35"/>
-                  <path d="m42 38 14 19-14 19-14-19Z" fill="currentColor"/>
-                </g>
-                <path d="M39 30v10m-5-5h10m158 94v10m-5-5h10" stroke="currentColor" stroke-width="2"/>
-              </svg>
-            </div>
-            <div class="card-info">
-              <p class="card-kind">Cards</p>
-              <div class="card-heading"><h4 id="matching-title">matching</h4><span class="arrow" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 10h12m-5-5 5 5-5 5"/></svg></span></div>
-              <p class="description" id="matching-description">Super Mario Bros. 3 card matching</p>
-            </div>
-          </a>
-        </div>
+    </header>
+
+    <main>
+      <h1>Games &amp; <span>other stuff.</span></h1>
+
+      <!--
+        To add a project, copy one <li class="card"> block and change its --accent,
+        href, art, title, kind, description and platform tag. In the art, shapes with
+        class fill-tile, fill-panel, fill-raised or stroke-tile follow the tile colours.
+        Use class="platform phone" for games that work on phones. For a link that leaves
+        the site, copy udm50's ↗ arrow and "View repository" label instead.
+        List games that work on phones before desktop-only ones. Do this in the HTML,
+        not with CSS order, so card numbers, tab order and screen readers match what's
+        on screen.
+        Card numbers and tile colours update themselves, and a card alone on its
+        shelf goes full width. A fifth game makes a 4 + 1 row on wide screens.
+      -->
+      <section class="shelf" aria-labelledby="games">
+        <h2 id="games">Games</h2>
+        <ul class="cards" role="list">
+          <li class="card" style="--accent: #efc66c">
+            <a href="./matching/">
+              <div class="art" aria-hidden="true">
+                <svg viewBox="0 0 244 166" fill="none">
+                  <g transform="translate(53 25) rotate(-12 42 56)">
+                    <rect class="fill-panel" width="84" height="112" rx="9" stroke="currentColor" stroke-width="2"/>
+                    <rect x="7" y="7" width="70" height="98" rx="4" stroke="currentColor" stroke-opacity=".35"/>
+                    <path d="m42 38 14 19-14 19-14-19Z" fill="currentColor"/>
+                  </g>
+                  <g transform="translate(112 30) rotate(12 42 56)">
+                    <rect class="fill-raised" width="84" height="112" rx="9" stroke="currentColor" stroke-width="2"/>
+                    <rect x="7" y="7" width="70" height="98" rx="4" stroke="currentColor" stroke-opacity=".35"/>
+                    <path d="m42 38 14 19-14 19-14-19Z" fill="currentColor"/>
+                  </g>
+                  <path d="M39 30v10m-5-5h10m158 94v10m-5-5h10" stroke="currentColor" stroke-width="2"/>
+                </svg>
+              </div>
+              <div class="card-body">
+                <h3>matching</h3>
+                <p class="kind">Cards</p>
+                <p class="desc">Super Mario Bros. 3 card matching</p>
+                <span class="go" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 10h12m-5-5 5 5-5 5"/></svg></span>
+              </div>
+              <p class="platform phone">Desktop + mobile</p>
+            </a>
+          </li>
+          <li class="card" style="--accent: #a7c6b5">
+            <a href="./lighting/">
+              <div class="art" aria-hidden="true">
+                <svg viewBox="0 0 244 166" fill="none">
+                  <path d="M47 17v130h150V17" stroke="currentColor" stroke-opacity=".25" stroke-width="2"/>
+                  <g class="stroke-tile" fill="currentColor" fill-opacity=".85" stroke-width="3">
+                    <rect x="50" y="120" width="28" height="25" rx="3"/><rect x="79" y="120" width="28" height="25" rx="3"/>
+                    <rect x="108" y="120" width="28" height="25" rx="3"/><rect x="79" y="94" width="28" height="25" rx="3"/>
+                  </g>
+                  <g class="stroke-tile" fill="currentColor" fill-opacity=".4" stroke-width="3">
+                    <rect x="137" y="120" width="28" height="25" rx="3"/><rect x="166" y="120" width="28" height="25" rx="3"/>
+                    <rect x="166" y="94" width="28" height="25" rx="3"/><rect x="166" y="68" width="28" height="25" rx="3"/>
+                  </g>
+                  <g class="stroke-tile" fill="currentColor" stroke-width="3">
+                    <rect x="79" y="17" width="28" height="25" rx="3"/><rect x="108" y="17" width="28" height="25" rx="3"/>
+                    <rect x="108" y="43" width="28" height="25" rx="3"/><rect x="137" y="43" width="28" height="25" rx="3"/>
+                  </g>
+                  <path d="M122 79v14m-4-4 4 4 4-4" stroke="currentColor" stroke-opacity=".5" stroke-width="1.5"/>
+                </svg>
+              </div>
+              <div class="card-body">
+                <h3>lighting</h3>
+                <p class="kind">Blocks</p>
+                <p class="desc">Tetris clone vs. AI</p>
+                <span class="go" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 10h12m-5-5 5 5-5 5"/></svg></span>
+              </div>
+              <p class="platform">Desktop only</p>
+            </a>
+          </li>
+          <li class="card" style="--accent: #b9b3df">
+            <a href="./mazing/">
+              <div class="art" aria-hidden="true">
+                <svg viewBox="0 0 244 166" fill="none">
+                  <g stroke="currentColor" stroke-opacity=".45" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M24 60V29a6 6 0 0 1 6-6h72v28h40V23h72a6 6 0 0 1 6 6v31M24 106v31a6 6 0 0 0 6 6h72v-28h40v28h72a6 6 0 0 0 6-6v-31"/>
+                    <path d="M44 48h36m84 0h36M44 118h36m84 0h36"/>
+                  </g>
+                  <path d="M105 64a28 28 0 1 0 0 38L83 83Z" fill="currentColor"/>
+                  <circle class="fill-tile" cx="83" cy="68" r="3"/>
+                  <g fill="currentColor"><circle cx="129" cy="83" r="3"/><circle cx="152" cy="83" r="3"/><circle cx="175" cy="83" r="3"/><circle cx="198" cy="83" r="3"/></g>
+                </svg>
+              </div>
+              <div class="card-body">
+                <h3>mazing</h3>
+                <p class="kind">Maze</p>
+                <p class="desc">Pac-Man clone</p>
+                <span class="go" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 10h12m-5-5 5 5-5 5"/></svg></span>
+              </div>
+              <p class="platform">Desktop only</p>
+            </a>
+          </li>
+          <li class="card" style="--accent: #e7aa8d">
+            <a href="./starwars/">
+              <div class="art" aria-hidden="true">
+                <svg viewBox="0 0 244 166" fill="none">
+                  <rect class="fill-panel" x="29" y="29" width="186" height="112" rx="7" stroke="currentColor" stroke-width="2"/>
+                  <path d="M29 51h186" stroke="currentColor" stroke-opacity=".4"/>
+                  <g fill="currentColor" fill-opacity=".6"><circle cx="41" cy="40" r="2"/><circle cx="50" cy="40" r="2"/><circle cx="59" cy="40" r="2"/></g>
+                  <path d="m49 73 9 8-9 8m19 0h25" stroke="currentColor" stroke-width="3"/>
+                  <path d="M49 106h99m-99 10h67" stroke="currentColor" stroke-opacity=".3" stroke-width="3"/>
+                  <path d="m191 14 2-5 2 5 5 2-5 2-2 5-2-5-5-2Z" fill="currentColor"/>
+                  <circle cx="17" cy="126" r="2" fill="currentColor"/>
+                </svg>
+              </div>
+              <div class="card-body">
+                <h3>starwars</h3>
+                <p class="kind">Text adventure</p>
+                <p class="desc">Star Wars text adventure (port)</p>
+                <span class="go" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 10h12m-5-5 5 5-5 5"/></svg></span>
+              </div>
+              <p class="platform">Desktop only</p>
+            </a>
+          </li>
+        </ul>
       </section>
-      <section class="game-section" aria-labelledby="desktop-title">
-        <h3 class="section-label" id="desktop-title"><span>Desktop only</span><span>3 games</span></h3>
-        <div class="games">
-          <a class="game lighting" href="./lighting" aria-labelledby="lighting-title lighting-description">
-            <div class="art" aria-hidden="true">
-              <span class="card-number">02</span>
-              <svg viewBox="0 0 244 166" fill="none">
-                <path d="M47 17v130h150V17" stroke="currentColor" stroke-opacity=".25" stroke-width="2"/>
-                <g fill="currentColor" fill-opacity=".85" stroke="#24302b" stroke-width="3">
-                  <rect x="50" y="120" width="28" height="25" rx="3"/><rect x="79" y="120" width="28" height="25" rx="3"/>
-                  <rect x="108" y="120" width="28" height="25" rx="3"/><rect x="79" y="94" width="28" height="25" rx="3"/>
-                </g>
-                <g fill="currentColor" fill-opacity=".4" stroke="#24302b" stroke-width="3">
-                  <rect x="137" y="120" width="28" height="25" rx="3"/><rect x="166" y="120" width="28" height="25" rx="3"/>
-                  <rect x="166" y="94" width="28" height="25" rx="3"/><rect x="166" y="68" width="28" height="25" rx="3"/>
-                </g>
-                <g fill="currentColor" stroke="#24302b" stroke-width="3">
-                  <rect x="79" y="17" width="28" height="25" rx="3"/><rect x="108" y="17" width="28" height="25" rx="3"/>
-                  <rect x="108" y="43" width="28" height="25" rx="3"/><rect x="137" y="43" width="28" height="25" rx="3"/>
-                </g>
-                <path d="M122 79v14m-4-4 4 4 4-4" stroke="currentColor" stroke-opacity=".5" stroke-width="1.5"/>
-              </svg>
-            </div>
-            <div class="card-info">
-              <p class="card-kind">Blocks</p>
-              <div class="card-heading"><h4 id="lighting-title">lighting</h4><span class="arrow" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 10h12m-5-5 5 5-5 5"/></svg></span></div>
-              <p class="description" id="lighting-description">Tetris clone vs. AI</p>
-            </div>
-          </a>
-          <a class="game mazing" href="./mazing" aria-labelledby="mazing-title mazing-description">
-            <div class="art" aria-hidden="true">
-              <span class="card-number">03</span>
-              <svg viewBox="0 0 244 166" fill="none">
-                <g stroke="currentColor" stroke-opacity=".45" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M24 60V29a6 6 0 0 1 6-6h72v28h40V23h72a6 6 0 0 1 6 6v31M24 106v31a6 6 0 0 0 6 6h72v-28h40v28h72a6 6 0 0 0 6-6v-31"/>
-                  <path d="M44 48h36m84 0h36M44 118h36m84 0h36"/>
-                </g>
-                <path d="M105 64a28 28 0 1 0 0 38L83 83Z" fill="currentColor"/>
-                <circle cx="83" cy="68" r="3" fill="#2b2836"/>
-                <g fill="currentColor"><circle cx="129" cy="83" r="3"/><circle cx="152" cy="83" r="3"/><circle cx="175" cy="83" r="3"/><circle cx="198" cy="83" r="3"/></g>
-              </svg>
-            </div>
-            <div class="card-info">
-              <p class="card-kind">Maze</p>
-              <div class="card-heading"><h4 id="mazing-title">mazing</h4><span class="arrow" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 10h12m-5-5 5 5-5 5"/></svg></span></div>
-              <p class="description" id="mazing-description">Pac-Man clone</p>
-            </div>
-          </a>
-          <a class="game starwars" href="./starwars" aria-labelledby="starwars-title starwars-description">
-            <div class="art" aria-hidden="true">
-              <span class="card-number">04</span>
-              <svg viewBox="0 0 244 166" fill="none">
-                <rect x="29" y="29" width="186" height="112" rx="7" fill="#262522" stroke="currentColor" stroke-width="2"/>
-                <path d="M29 51h186" stroke="currentColor" stroke-opacity=".4"/>
-                <g fill="currentColor" fill-opacity=".6"><circle cx="41" cy="40" r="2"/><circle cx="50" cy="40" r="2"/><circle cx="59" cy="40" r="2"/></g>
-                <path d="m49 73 9 8-9 8m19 0h25" stroke="currentColor" stroke-width="3"/>
-                <path d="M49 106h99m-99 10h67" stroke="currentColor" stroke-opacity=".3" stroke-width="3"/>
-                <path d="m191 14 2-5 2 5 5 2-5 2-2 5-2-5-5-2Z" fill="currentColor"/>
-                <circle cx="17" cy="126" r="2" fill="currentColor"/>
-              </svg>
-            </div>
-            <div class="card-info">
-              <p class="card-kind">Text adventure</p>
-              <div class="card-heading"><h4 id="starwars-title">starwars</h4><span class="arrow" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 10h12m-5-5 5 5-5 5"/></svg></span></div>
-              <p class="description" id="starwars-description">Star Wars text adventure (port)</p>
-            </div>
-          </a>
-        </div>
+
+      <section class="shelf" aria-labelledby="tools">
+        <h2 id="tools">Tools</h2>
+        <ul class="cards" role="list">
+          <li class="card" style="--accent: #91c6d6">
+            <a href="https://github.com/hiddenwaffle/udm50">
+              <div class="art" aria-hidden="true">
+                <svg viewBox="0 0 244 166" fill="none">
+                  <rect class="fill-panel" x="22" y="20" width="200" height="44" rx="10" stroke="currentColor" stroke-width="2"/>
+                  <circle cx="43" cy="40" r="6" stroke="currentColor" stroke-width="2"/>
+                  <path d="m48 45 5 5M66 42h94" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                  <path d="M199 35v10h-12m4-4-4 4 4 4" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                  <path d="M121 71v12m-4-4 4 4 4-4" stroke="currentColor" stroke-opacity=".5" stroke-width="1.5"/>
+                  <rect class="fill-panel" x="52" y="91" width="170" height="62" rx="6" stroke="currentColor" stroke-opacity=".6" stroke-width="1.5"/>
+                  <path d="M52 106h170" stroke="currentColor" stroke-opacity=".3"/>
+                  <g fill="currentColor" fill-opacity=".6"><circle cx="62" cy="99" r="1.5"/><circle cx="69" cy="99" r="1.5"/><circle cx="76" cy="99" r="1.5"/></g>
+                  <path d="M68 120h108M68 130h135M68 140h86" stroke="currentColor" stroke-opacity=".5" stroke-width="2"/>
+                  <path d="m30 115 2-6 2 6 6 2-6 2-2 6-2-6-6-2Z" fill="currentColor"/>
+                </svg>
+              </div>
+              <div class="card-body">
+                <h3>udm50</h3>
+                <p class="kind">macOS · GitHub</p>
+                <p class="desc">A Spotlight-style launcher for Google AI Mode, with a dedicated answer window and Markdown export.</p>
+                <span class="via">View repository</span>
+                <span class="go" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 14 14 6M7.5 6H14v6.5"/></svg></span>
+              </div>
+            </a>
+          </li>
+        </ul>
       </section>
+
+      <!-- Misc has no projects yet. Uncomment this section and its nav link when it does. -->
+      <!--
+      <section class="shelf" aria-labelledby="misc">
+        <h2 id="misc">Misc</h2>
+        <ul class="cards" role="list">
+          (paste a card here)
+        </ul>
       </section>
-      <section class="project-category" id="tools" tabindex="-1" aria-labelledby="tools-heading">
-        <header class="category-heading"><h2 id="tools-heading">Tools</h2><a class="back-link" href="#categories"><svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 16V4m-5 5 5-5 5 5"/></svg>All categories</a></header>
-      <section class="game-section" aria-labelledby="tools-title">
-        <h3 class="section-label" id="tools-title"><span>Projects</span><span>1 tool</span></h3>
-        <div class="games">
-          <a class="game udm50" href="https://github.com/hiddenwaffle/udm50" aria-labelledby="udm50-title udm50-platform udm50-description udm50-repository">
-            <div class="art" aria-hidden="true">
-              <span class="card-number">05</span>
-              <svg viewBox="0 0 244 166" fill="none">
-                <rect x="22" y="20" width="200" height="44" rx="10" fill="#1d272b" stroke="currentColor" stroke-width="2"/>
-                <circle cx="43" cy="40" r="6" stroke="currentColor" stroke-width="2"/>
-                <path d="m48 45 5 5M66 42h94" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                <path d="M199 35v10h-12m4-4-4 4 4 4" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
-                <path d="M121 71v12m-4-4 4 4 4-4" stroke="currentColor" stroke-opacity=".5" stroke-width="1.5"/>
-                <rect x="52" y="91" width="170" height="62" rx="6" fill="#1d272b" stroke="currentColor" stroke-opacity=".6" stroke-width="1.5"/>
-                <path d="M52 106h170" stroke="currentColor" stroke-opacity=".3"/>
-                <g fill="currentColor" fill-opacity=".6"><circle cx="62" cy="99" r="1.5"/><circle cx="69" cy="99" r="1.5"/><circle cx="76" cy="99" r="1.5"/></g>
-                <path d="M68 120h108M68 130h135M68 140h86" stroke="currentColor" stroke-opacity=".5" stroke-width="2"/>
-                <path d="m30 115 2-6 2 6 6 2-6 2-2 6-2-6-6-2Z" fill="currentColor"/>
-              </svg>
-            </div>
-            <div class="card-info">
-              <p class="card-kind" id="udm50-platform">macOS · GitHub</p>
-              <div class="card-heading"><h4 id="udm50-title">udm50</h4><span class="arrow" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 10h12m-5-5 5 5-5 5"/></svg></span></div>
-              <p class="description" id="udm50-description">A Spotlight-style launcher for Google AI Mode, with a dedicated answer window and Markdown export.</p>
-              <span class="repository-label" id="udm50-repository">View repository</span>
-            </div>
-          </a>
-        </div>
-      </section>
-      </section>
-      <section class="project-category" id="misc" tabindex="-1" aria-labelledby="misc-heading">
-        <header class="category-heading"><h2 id="misc-heading">Misc</h2><a class="back-link" href="#categories"><svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 16V4m-5 5 5-5 5 5"/></svg>All categories</a></header>
-        <div class="empty-state"><p>No projects here yet.</p></div>
-      </section>
+      -->
     </main>
+
     <footer class="footer">
       <p>More things over on <a href="https://github.com/hiddenwaffle">GitHub</a></p>
+      <a class="pi" href="#top" aria-label="π (back to top)">π</a>
     </footer>
   </div>
-  <a class="pi" href="#top" aria-label="Back to top">π</a>
 </body>
 </html>
